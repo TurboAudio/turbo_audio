@@ -1,5 +1,8 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 
+mod effect;
+use crate::effect::{Effect, MoodyEffect};
+
 fn main() {
     let host = cpal::default_host();
     let devices = host.devices().unwrap();
@@ -22,4 +25,12 @@ fn main() {
             break;
         }
     }
+    effect_test();
+}
+
+fn effect_test() {
+    let moody_effect = effect::MoodyEffect::new();
+    let effect_string = moody_effect.serialize();
+    let new_effect: MoodyEffect = effect::MoodyEffect::deserialize(&effect_string);
+    println!("{}", effect_string);
 }
