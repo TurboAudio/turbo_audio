@@ -47,6 +47,8 @@ fn main() {
     }
     .unwrap();
 
+    println!("This is a test!");
+
     loop {
         std::thread::sleep(std::time::Duration::new(5, 0));
     }
