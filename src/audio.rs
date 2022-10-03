@@ -30,10 +30,24 @@ fn get_input_config(audio_device: &Device) -> SupportedStreamConfig {
         .with_sample_rate(cpal::SampleRate(44100))
 }
 
-fn callback<T: cpal::Sample>(data: &[T], tx: &Sender<i16>) {
-    for point in data {
-        let _ = tx.send(point.to_i16());
-    }
+fn build_audio_stream<T: cpal::Sample>(
+    audio_device: &Device,
+    config: &StreamConfig,
+    tx: Sender<i16>,
+) -> Result<cpal::Stream, cpal::BuildStreamError> {
+    let err_fn = |err| {
+        panic!("ERROR: {:?}", err);
+    };
+
+    audio_device.build_input_stream(
+        config,
+        move |data: &[T], _: &InputCallbackInfo| {
+            for point in data {
+                let _ = tx.send(point.to_i16());
+            }
+        },
+        err_fn,
+    )
 }
 
 fn start_stream(
@@ -41,34 +55,13 @@ fn start_stream(
     audio_device: &Device,
     sample_format: &SampleFormat,
 ) -> (cpal::Stream, Receiver<i16>) {
-    let err_fn = |err| {
-        panic!("ERROR: {:?}", err);
-    };
 
     let (tx, rx) = sync::mpsc::channel();
 
     let stream = match sample_format {
-        SampleFormat::U16 => audio_device.build_input_stream(
-            config,
-            move |data: &[u16], _: &InputCallbackInfo| {
-                callback(data, &tx);
-            },
-            err_fn,
-        ),
-        SampleFormat::I16 => audio_device.build_input_stream(
-            config,
-            move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                callback(data, &tx);
-            },
-            err_fn,
-        ),
-        SampleFormat::F32 => audio_device.build_input_stream(
-            config,
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                callback(data, &tx);
-            },
-            err_fn,
-        ),
+        SampleFormat::U16 => build_audio_stream::<u16>(audio_device, config, tx),
+        SampleFormat::I16 => build_audio_stream::<i16>(audio_device, config, tx),
+        SampleFormat::F32 => build_audio_stream::<f32>(audio_device, config, tx),
     }
     .unwrap();
 
