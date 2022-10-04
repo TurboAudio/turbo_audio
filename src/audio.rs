@@ -17,7 +17,7 @@ fn get_audio_device() -> Device {
     let host = cpal::default_host();
     let mut devices = host.devices().expect("Host has no audio device");
     devices
-        .find(|device| device.name().expect("Audio device has no name") == "pulse")
+        .find(|device| device.name().expect("Failed to retrieve audio device name") == "pulse")
         .expect("No suitable audio device found")
 }
 
@@ -55,7 +55,6 @@ fn start_stream(
     audio_device: &Device,
     sample_format: &SampleFormat,
 ) -> (cpal::Stream, Receiver<i16>) {
-
     let (tx, rx) = sync::mpsc::channel();
 
     let stream = match sample_format {
