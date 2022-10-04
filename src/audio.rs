@@ -62,7 +62,7 @@ fn start_stream(
         SampleFormat::I16 => build_audio_stream::<i16>(audio_device, config, tx),
         SampleFormat::F32 => build_audio_stream::<f32>(audio_device, config, tx),
     }
-    .unwrap();
+    .expect("Failed to create audio stream");
 
     (stream, rx)
 }
