@@ -6,4 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cpal = "0.14.0"
+clap = { version = "4.0.10", features = ["derive"] }
+cpal = { version = "0.14.0", features = ["jack"] }
