@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.0.10", features = ["derive"] }
 cpal = { version = "0.14.0", features = ["jack"] }
+pipewire = "0.5.0"
