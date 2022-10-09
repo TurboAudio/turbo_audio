@@ -10,7 +10,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install alsa-utils
+          sudo apt-get install alsa alsa-utils -y
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install alsa-utils
+          sudo apt-get install alsa alsa-utils -y
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
@@ -62,7 +62,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install alsa-utils
+          sudo apt-get install alsa alsa-utils -y
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
