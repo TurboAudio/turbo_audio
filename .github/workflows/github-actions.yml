@@ -10,8 +10,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install
-
+          sudo apt-get install alsa-utils
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
@@ -26,6 +25,10 @@ jobs:
     name: Test Suite
     runs-on: ubuntu-latest
     steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install alsa-utils
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
@@ -56,6 +59,10 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install alsa-utils
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
