@@ -1,7 +1,7 @@
 use futures_util::{StreamExt, FutureExt};
 use warp::Filter;
 
-pub async fn main() {
+pub fn main(handle: tokio::runtime::Handle) -> tokio::task::JoinHandle<()>{
     let routes = warp::path("echo")
         .and(warp::ws())
         .map(|ws: warp::ws::Ws| {
@@ -15,6 +15,6 @@ pub async fn main() {
             })
         });
 
-    warp::serve(routes).run(([127, 0, 0, 1], 9001)).await;
+    handle.spawn(warp::serve(routes).run(([127, 0, 0, 1], 9001)))
 }
 
