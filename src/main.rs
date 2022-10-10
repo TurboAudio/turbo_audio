@@ -32,7 +32,7 @@ fn run_loop() {
 
 fn main() {
     let args = Args::parse();
-    start_pipewire_listener();
     let (_stream, _rx) = start_audio_loop(args.device_name, args.jack, args.sample_rate);
+    start_pipewire_listener();
     run_loop();
 }

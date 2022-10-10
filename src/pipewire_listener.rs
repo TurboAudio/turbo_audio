@@ -2,19 +2,21 @@ use pipewire::{
     prelude::ReadableDict,
     registry::{GlobalObject, Registry},
     spa::ForeignDict,
-    Context, Core, MainLoop,
+    Core, MainLoop,
 };
 
-use std::cell::RefCell;
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
     thread,
 };
 
+use anyhow::{anyhow, bail, ensure, Context, Result};
+
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
-pub enum PortType {
+enum PortType {
     Input,
     Output,
 }
@@ -60,6 +62,16 @@ struct PipewireState {
 }
 
 impl PipewireState {
+    fn new() -> Self {
+        Self {
+            nodes: HashMap::new(),
+            ports: HashMap::new(),
+            links: HashMap::new(),
+            output_to_input_port_links: HashMap::new(),
+            node_name_to_ids: HashMap::new(),
+            id_types: HashMap::new(),
+        }
+    }
     fn get_connected_port_ids_between_node_ids(
         &self,
         output_node_id: &u32,
@@ -137,17 +149,15 @@ impl PipewireState {
         Some(connected_port_names)
     }
 
-    fn add_node(&mut self, node: &GlobalObject<ForeignDict>) {
+    fn add_node(&mut self, node: &GlobalObject<ForeignDict>) -> Result<()> {
         let props = node
             .props
             .as_ref()
-            .expect("Node object doesn't have properties");
-
-        let description = props.get("node.description");
+            .context("Node object doesn't have properties")?;
 
         let name = props
             .get("node.nick")
-            .or(description)
+            .or_else(|| props.get("node.description"))
             .or_else(|| props.get("node.name"))
             .unwrap_or_default()
             .to_string();
@@ -157,8 +167,8 @@ impl PipewireState {
             PipewireNode {
                 id: node.id,
                 name: name.clone(),
-                input_ports: HashSet::<u32>::new(),
-                output_ports: HashSet::<u32>::new(),
+                input_ports: HashSet::new(),
+                output_ports: HashSet::new(),
             },
         );
 
@@ -167,104 +177,110 @@ impl PipewireState {
             .entry(name)
             .or_default()
             .insert(node.id);
+
+        Ok(())
     }
 
-    fn add_port(&mut self, port: &GlobalObject<ForeignDict>) {
+    fn add_port(&mut self, port: &GlobalObject<ForeignDict>) -> Result<()> {
         let props = port
             .props
             .as_ref()
-            .expect("Port object doesn't have properties");
+            .context("Port object doesn't have properties")?;
 
         let name = props.get("port.name").unwrap_or_default().to_string();
 
         let node_id = props
             .get("node.id")
-            .expect("Port object doesn't have node.id property")
+            .context("Port object doesn't have node.id property")?
             .parse::<u32>()
-            .expect("Couldn't parse node.id as u32");
+            .context("Couldn't parse node.id as u32")?;
 
         let port_type = match props.get("port.direction") {
             Some("in") => PortType::Input,
             Some("out") => PortType::Output,
+            Some(port_type) => {
+                bail!("Port direction not supported: {:?}", port_type);
+            }
             _ => {
-                return;
+                bail!("No port direction");
             }
         };
 
-        if let Some(node) = self.nodes.get_mut(&node_id) {
-            self.ports.insert(
-                port.id,
-                PipewirePort {
-                    name,
-                    id: port.id,
-                    node_id,
-                    port_type,
-                    links: HashSet::<u32>::new(),
-                },
-            );
-
-            self.id_types.insert(port.id, PipewireObjectType::Port);
-
-            match port_type {
-                PortType::Input => {
-                    node.input_ports.insert(port.id);
-                }
-                PortType::Output => {
-                    node.output_ports.insert(port.id);
-                }
-            }
-        } else {
-            println!(
+        let node = self.nodes.get_mut(&node_id).with_context(|| {
+            format!(
                 "Failed to add port #{} because it's parent node #{} was never created",
                 port.id, node_id
-            );
+            )
+        })?;
+
+        self.ports.insert(
+            port.id,
+            PipewirePort {
+                name,
+                id: port.id,
+                node_id,
+                port_type,
+                links: HashSet::new(),
+            },
+        );
+
+        self.id_types.insert(port.id, PipewireObjectType::Port);
+
+        match port_type {
+            PortType::Input => {
+                node.input_ports.insert(port.id);
+            }
+            PortType::Output => {
+                node.output_ports.insert(port.id);
+            }
         }
+        Ok(())
     }
 
-    fn add_link(&mut self, link: &GlobalObject<ForeignDict>) {
+    fn add_link(&mut self, link: &GlobalObject<ForeignDict>) -> Result<()> {
         let props = link
             .props
             .as_ref()
-            .expect("Port object doesn't have properties");
+            .context("Link object doesn't have properties")?;
 
         let output_port_id = props
             .get("link.output.port")
-            .expect("No output port for link")
+            .context("No output port for link")?
             .to_string()
             .parse::<u32>()
-            .unwrap();
+            .context("Failed to parse u32")?;
 
         let input_port_id = props
             .get("link.input.port")
-            .expect("No input port for link")
+            .context("No input port for link")?
             .to_string()
             .parse::<u32>()
-            .unwrap();
+            .context("Failed to parse u32")?;
 
         let output_node_id = props
             .get("link.output.node")
-            .expect("No input port for link")
+            .context("No input port for link")?
             .to_string()
             .parse::<u32>()
-            .unwrap();
+            .context("Failed to parse u32")?;
 
         let input_node_id = props
             .get("link.input.node")
-            .expect("No input port for link")
+            .context("No input port for link")?
             .to_string()
             .parse::<u32>()
-            .unwrap();
+            .context("Failed to parse u32")?;
 
         let output_port = self
             .ports
             .get_mut(&output_port_id)
-            .expect("Port was never registered");
+            .context("Port was never registered")?;
         output_port.links.insert(link.id);
 
         let input_port = self
             .ports
             .get_mut(&input_port_id)
-            .expect("Port was never registered");
+            .context("Port was never registered")?;
         input_port.links.insert(link.id);
 
         self.output_to_input_port_links
@@ -283,103 +299,126 @@ impl PipewireState {
             },
         );
         self.id_types.insert(link.id, PipewireObjectType::Link);
+
+        Ok(())
     }
 
-    fn remove_object(&mut self, id: u32) {
-        if let Some(pipewire_object_type) = self.id_types.remove(&id) {
-            match pipewire_object_type {
-                PipewireObjectType::Node => self.remove_node(id),
-                PipewireObjectType::Port => self.remove_port(id),
-                PipewireObjectType::Link => self.remove_link(id),
-            }
-        } else {
-            println!("Couldn't remove object with id #{}", id);
+    fn remove_object(&mut self, id: u32) -> Result<()> {
+        let pipewire_object_type = self
+            .id_types
+            .remove(&id)
+            .with_context(|| format!("Couldn't remove object with id #{}", id))?;
+        match pipewire_object_type {
+            PipewireObjectType::Node => self.remove_node(id),
+            PipewireObjectType::Port => self.remove_port(id),
+            PipewireObjectType::Link => self.remove_link(id),
         }
     }
 
-    fn remove_node(&mut self, id: u32) {
-        if let Some(node) = self.nodes.remove(&id) {
-            if let Some(ids) = self.node_name_to_ids.get_mut(&node.name) {
-                if !ids.remove(&id) {
-                    println!("Error while removing node #{}, id not mapped to a name", id);
-                }
-                if ids.is_empty() {
-                    self.node_name_to_ids.remove(&node.name);
-                }
-            }
-        } else {
-            println!("Couldn't remove node with id #{}", id);
+    fn remove_node(&mut self, id: u32) -> Result<()> {
+        let node = self
+            .nodes
+            .remove(&id)
+            .with_context(|| format!("Node with id {} doesn't exist", id))?;
+        let ids = self.node_name_to_ids.get_mut(&node.name).with_context(|| {
+            format!("Error while removing node #{}, id not mapped to a name", id)
+        })?;
+        ensure!(
+            ids.remove(&id),
+            "Error while removing node #{}, id not mapped to a name",
+            id
+        );
+        if ids.is_empty() {
+            self.node_name_to_ids.remove(&node.name);
         }
+        Ok(())
     }
 
-    fn remove_port(&mut self, id: u32) {
-        if let Some(port) = self.ports.remove(&id) {
-            if let Some(parent_node) = self.nodes.get_mut(&port.node_id) {
-                match port.port_type {
-                    PortType::Input => {
-                        if !parent_node.input_ports.remove(&id) {
-                            println!("Error removing port #{}. Parent node #{} didn't have it as an input port", id, port.node_id);
-                        }
-                    }
-                    PortType::Output => {
-                        if !parent_node.output_ports.remove(&id) {
-                            println!("Error while removing port #{}, parent node #{} didn't have it as an output port", id, port.node_id);
-                        }
-                    }
-                }
-            } else {
-                println!(
-                    "Error removing port #{}, parent node #{} doesn't exist",
-                    id, port.node_id
+    fn remove_port(&mut self, id: u32) -> Result<()> {
+        let port = self
+            .ports
+            .remove(&id)
+            .with_context(|| format!("Error removing port #{}, port doesn't exist", id))?;
+
+        let parent_node = self.nodes.get_mut(&port.node_id).with_context(|| {
+            format!(
+                "Error removing port #{}, parent node #{} doesn't exist",
+                id, port.node_id
+            )
+        })?;
+
+        match port.port_type {
+            PortType::Input => {
+                ensure!(
+                    parent_node.input_ports.remove(&id),
+                    "Error removing port #{}. Parent node #{} didn't have it as an input port",
+                    id,
+                    port.node_id
                 );
             }
-        } else {
-            println!("Error removing port #{}, port doesn't exist", id);
+            PortType::Output => {
+                ensure!(
+                    parent_node.output_ports.remove(&id),
+                    "Error while removing port #{}, parent node #{} \
+                    didn't have it as an output port",
+                    id,
+                    port.node_id
+                );
+            }
         }
+        Ok(())
     }
 
-    fn remove_link(&mut self, id: u32) {
-        if let Some(link) = self.links.remove(&id) {
-            fn remove_link_from_port(state: &mut PipewireState, link_id: &u32, port_id: &u32) {
-                if let Some(port) = state.ports.get_mut(port_id) {
-                    if !port.links.remove(link_id) {
-                        println!(
-                        "Error while removing link #{}, input port #{} doesn't have it as a link",
-                        link_id, port_id
-                    );
-                    }
-                } else {
-                    println!(
-                        "Error while removing link #{}, input port #{} doesn't exist",
-                        link_id, port_id
-                    );
-                }
-            }
+    fn remove_link(&mut self, id: u32) -> Result<()> {
+        fn remove_link_from_port(
+            state: &mut PipewireState,
+            link_id: &u32,
+            port_id: &u32,
+        ) -> Result<()> {
+            let port = state.ports.get_mut(port_id).with_context(|| {
+                format!(
+                    "Error while removing link #{}, input port #{} doesn't exist",
+                    link_id, port_id
+                )
+            })?;
+            ensure!(
+                port.links.remove(link_id),
+                "Error while removing link #{}, input port #{} doesn't have it as a link",
+                link_id,
+                port_id
+            );
+            Ok(())
+        }
 
-            remove_link_from_port(self, &id, &link.input_port_id);
-            remove_link_from_port(self, &id, &link.output_port_id);
-            if let Some(output_port_links) = self
-                .output_to_input_port_links
-                .get_mut(&link.output_port_id)
-            {
-                if !output_port_links.remove(&link.input_port_id) {
-                    println!(
-                        "Error while removing link #{}, link representation not present",
-                        id
-                    );
-                }
-                if output_port_links.is_empty() {
-                    self.output_to_input_port_links.remove(&link.output_port_id);
-                }
-            } else {
-                println!(
+        let link = self
+            .links
+            .remove(&id)
+            .with_context(|| format!("Error while removing link #{}, link doesn't exist", id))?;
+
+        remove_link_from_port(self, &id, &link.input_port_id)?;
+        remove_link_from_port(self, &id, &link.output_port_id)?;
+
+        let output_port_links = self
+            .output_to_input_port_links
+            .get_mut(&link.output_port_id)
+            .with_context(|| {
+                format!(
                     "Error while removing link #{}, link representation not present",
                     id
-                );
-            }
-        } else {
-            println!("Error while removing link #{}, link doesn't exist", id);
+                )
+            })?;
+
+        ensure!(
+            output_port_links.remove(&link.input_port_id),
+            "Error while removing link #{}, link representation not present",
+            id
+        );
+
+        if output_port_links.is_empty() {
+            self.output_to_input_port_links.remove(&link.output_port_id);
         }
+
+        Ok(())
     }
 }
 
@@ -401,36 +440,28 @@ pub fn start_pipewire_listener() {
     thread::spawn(pipewire_thread);
 }
 
-fn pipewire_thread() {
+fn pipewire_thread() -> Result<()> {
     let connections = vec![
         StreamConnections {
             output_stream: "spotify".to_string(),
-            input_stream: "ALSA plug-in [turbo_audio]".to_string(),
-            port_connections: PortConnections::Only(vec![
-                ("output_FR".to_string(), "input_FR".to_string()),
-                ("output_FL".to_string(), "input_FL".to_string()),
-            ]),
-        },
-        StreamConnections {
-            output_stream: "NoiseTorch Microphone Source".to_string(),
             input_stream: "ALSA plug-in [turbo_audio]".to_string(),
             port_connections: PortConnections::AllInOrder,
         },
     ];
 
-    let state = Rc::new(RefCell::new(PipewireState {
-        nodes: HashMap::new(),
-        ports: HashMap::new(),
-        links: HashMap::new(),
-        output_to_input_port_links: HashMap::<u32, HashSet<u32>>::new(),
-        node_name_to_ids: HashMap::<String, HashSet<u32>>::new(),
-        id_types: HashMap::<u32, PipewireObjectType>::new(),
-    }));
+    let state = Rc::new(RefCell::new(PipewireState::new()));
 
-    let mainloop = MainLoop::new().unwrap();
-    let context = Context::new(&mainloop).unwrap();
-    let core = Rc::new(context.connect(None).unwrap());
-    let registry = Rc::new(core.get_registry().unwrap());
+    let mainloop = MainLoop::new().context("Couldn't create pipewire mainloop")?;
+    let context = pipewire::Context::new(&mainloop).context("Coudln't create pipewire context")?;
+    let core = Rc::new(
+        context
+            .connect(None)
+            .context("Couldn't create pipewire core")?,
+    );
+    let registry = Rc::new(
+        core.get_registry()
+            .context("Couldn't create pipewire registry")?,
+    );
 
     let _listener = registry
         .clone()
@@ -441,18 +472,26 @@ fn pipewire_thread() {
             let core = core.clone();
             move |global| match global.type_ {
                 pipewire::types::ObjectType::Node => {
-                    state.borrow_mut().add_node(global);
+                    state
+                        .borrow_mut()
+                        .add_node(global)
+                        .unwrap_or_else(|err| println!("{}", err));
                 }
                 pipewire::types::ObjectType::Port => {
-                    let now = std::time::Instant::now();
-                    state.borrow_mut().add_port(global);
+                    state
+                        .borrow_mut()
+                        .add_port(global)
+                        .unwrap_or_else(|err| println!("{}", err));
                     add_missing_connections(&core, &state.borrow(), &connections);
-                    println!("Elapsed: {}us", now.elapsed().as_micros());
                 }
                 pipewire::types::ObjectType::Link => {
-                    state.borrow_mut().add_link(global);
+                    state
+                        .borrow_mut()
+                        .add_link(global)
+                        .unwrap_or_else(|err| println!("{}", err));
                     if let Some(new_link) = state.borrow().links.get(&global.id) {
-                        check_remove_link(&state.borrow(), &registry, new_link, &connections);
+                        check_remove_link(&state.borrow(), &registry, new_link, &connections)
+                            .unwrap_or_else(|err| println!("{}", err));
                     }
                 }
                 _ => {}
@@ -460,13 +499,14 @@ fn pipewire_thread() {
         })
         .global_remove({
             move |id| {
-                state.borrow_mut().remove_object(id);
+                state.borrow_mut().remove_object(id).unwrap_or_else(|err| println!("{}", err));
                 add_missing_connections(&core, &state.borrow(), &connections);
             }
         })
         .register();
 
     mainloop.run();
+    Ok(())
 }
 
 fn get_nodes<'a>(state: &'a PipewireState, stream_name: &str) -> Vec<&'a PipewireNode> {
@@ -601,7 +641,7 @@ fn check_remove_link(
     registry: &Registry,
     link: &PipewireLink,
     stream_connections: &[StreamConnections],
-) {
+) -> Result<()> {
     let mut should_remove_link = match state.nodes.get(&link.input_node_id) {
         Some(input_node) => stream_connections
             .iter()
@@ -611,7 +651,7 @@ fn check_remove_link(
     };
 
     if !should_remove_link {
-        return;
+        return Ok(());
     }
 
     for stream_connection in stream_connections {
@@ -640,8 +680,9 @@ fn check_remove_link(
         }
     }
     if should_remove_link {
-        remove_link(link.id, registry);
+        remove_link(link.id, registry)?;
     }
+    Ok(())
 }
 
 fn add_link(core: &Core, output_port: u32, input_port: u32, output_node: u32, input_node: u32) {
@@ -657,8 +698,11 @@ fn add_link(core: &Core, output_port: u32, input_port: u32, output_node: u32, in
     )
     .expect("Failed to add new link");
 }
-fn remove_link(link_id: u32, registry: &Registry) {
-    if registry.destroy_global(link_id).into_result().is_err() {
-        println!("Failed to remove link #{}", link_id);
-    }
+
+fn remove_link(link_id: u32, registry: &Registry) -> Result<()> {
+    registry
+        .destroy_global(link_id)
+        .into_result()
+        .map_err(|spa_error| anyhow!(spa_error))?;
+    Ok(())
 }
