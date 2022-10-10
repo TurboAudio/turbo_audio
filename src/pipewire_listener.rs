@@ -441,13 +441,11 @@ pub fn start_pipewire_listener() {
 }
 
 fn pipewire_thread() -> Result<()> {
-    let connections = vec![
-        StreamConnections {
-            output_stream: "spotify".to_string(),
-            input_stream: "ALSA plug-in [turbo_audio]".to_string(),
-            port_connections: PortConnections::AllInOrder,
-        },
-    ];
+    let connections = vec![StreamConnections {
+        output_stream: "spotify".to_string(),
+        input_stream: "ALSA plug-in [turbo_audio]".to_string(),
+        port_connections: PortConnections::AllInOrder,
+    }];
 
     let state = Rc::new(RefCell::new(PipewireState::new()));
 
@@ -499,7 +497,10 @@ fn pipewire_thread() -> Result<()> {
         })
         .global_remove({
             move |id| {
-                state.borrow_mut().remove_object(id).unwrap_or_else(|err| println!("{}", err));
+                state
+                    .borrow_mut()
+                    .remove_object(id)
+                    .unwrap_or_else(|err| println!("{}", err));
                 add_missing_connections(&core, &state.borrow(), &connections);
             }
         })
