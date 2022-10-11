@@ -1,81 +1,118 @@
-use std::sync::mpsc::{Receiver, Sender, self};
-use std::thread::{spawn, JoinHandle};
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
-// TODO: Find a way to merge the 2 threads into one.
-pub struct Connection {
-    incomming_thread: JoinHandle<()>,
-    outgoing_thread: JoinHandle<()>,
-    tx: Sender<i32>,
-}
+use futures_util::{SinkExt, StreamExt, TryFutureExt};
+use tokio::{
+    sync::{mpsc, RwLock},
+    task::JoinHandle,
+};
+use tokio_stream::wrappers::UnboundedReceiverStream;
+use warp::{
+    ws::{Message, WebSocket},
+    Filter,
+};
 
-impl Connection {
-    // Takes channel on which to write incomming messages
-    pub fn new(incomming_channel: Sender<i32>) -> Connection {
-        let (tx, rx) = mpsc::channel();
-        Connection {
-            incomming_thread: spawn(move || {
-                for incomming_message in 0..10 {
-                    incomming_channel.send(incomming_message).unwrap();
-                }
-            }),
-            outgoing_thread: spawn(move || {
-                for message in rx.iter() {
-                    if message == 0 {
-                        return;
-                    }
-                    println!("Connection got {}", message);
-                }
-            }),
-            tx,
-        }
-    }
-
-    pub fn join(self) {
-        self.incomming_thread.join().unwrap();
-        self.outgoing_thread.join().unwrap();
-    }
-
-    pub fn send(&mut self, value: i32) {
-        self.tx.send(value).unwrap();
-    }
-}
+type Users = Arc<RwLock<HashMap<usize, mpsc::UnboundedSender<Message>>>>;
+type UserIdCounter = Arc<AtomicUsize>;
 
 pub struct WebSocketServer {
-    tx: Sender<i32>,
-    rx: Receiver<i32>,
-    connections: Vec<Connection>,
+    users: Users,
+    server_handle: Option<JoinHandle<()>>,
 }
 
 impl WebSocketServer {
     pub fn new() -> WebSocketServer {
-        let (tx, rx) = mpsc::channel();
         WebSocketServer {
-            connections: vec![],
-            tx,
-            rx,
+            users: Users::default(),
+            server_handle: None,
         }
     }
 
-    pub fn send_message(&mut self, value: i32) {
-        for connection in self.connections.iter_mut() {
-            connection.send(value);
+    pub fn start_server(&mut self, handle: tokio::runtime::Handle) {
+        let users = self.users.clone();
+        let user_id_counter = UserIdCounter::default();
+        let routes = warp::path("echo")
+            .and(warp::ws())
+            .and(warp::any().map(move || users.clone()))
+            .and(warp::any().map(move || user_id_counter.clone()))
+            .map(
+                |ws: warp::ws::Ws, users: Users, user_id_counter: UserIdCounter| {
+                    ws.on_upgrade(move |socket| {
+                        WebSocketServer::handle_connection(user_id_counter, socket, users)
+                    })
+                },
+            );
+
+        self.server_handle = Some(handle.spawn(warp::serve(routes).run(([127, 0, 0, 1], 9001))));
+    }
+
+    pub fn close(self) {
+        match self.server_handle {
+            Some(handle) => handle.abort(),
+            None => println!("No server handle"),
+        };
+    }
+
+    async fn handle_connection(user_id: UserIdCounter, ws: WebSocket, users: Users) {
+        let (mut user_ws_tx, mut user_ws_rx) = ws.split();
+        let (tx, rx) = mpsc::unbounded_channel();
+        let mut rx = UnboundedReceiverStream::new(rx);
+        tokio::task::spawn(async move {
+            while let Some(message) = rx.next().await {
+                user_ws_tx
+                    .send(message)
+                    .unwrap_or_else(|e| {
+                        eprintln!("Websocket send error: {}", e);
+                    })
+                    .await;
+            }
+        });
+
+        let user_id = user_id.fetch_add(1, Ordering::Relaxed);
+        users.write().await.insert(user_id, tx);
+        tokio::task::spawn(async move {
+            while let Some(result) = user_ws_rx.next().await {
+                let msg = match result {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        println!("websocket error(uid={}): {}", user_id, e);
+                        break;
+                    }
+                };
+                WebSocketServer::handle_message(user_id, msg, &users).await;
+            }
+
+            WebSocketServer::handle_user_disconnect(user_id, &users).await;
+        });
+    }
+
+    async fn handle_message(user_id: usize, message: Message, users: &Users) {
+        let message = if let Ok(str) = message.to_str() {
+            str
+        } else {
+            return;
+        };
+
+        let new_message = format!("<User#{}>: {}", user_id, message);
+        for (&uid, tx) in users.read().await.iter() {
+            if uid == user_id {
+                // Don't echo back message to sender
+                continue;
+            }
+
+            // If an error occurs, the user is disconnected and will be handled in
+            // another task
+            if let Err(_disconnected) = tx.send(Message::text(new_message.clone())) {}
         }
     }
 
-    pub fn get_messages(&mut self) {
-        for message in self.rx.try_iter() {
-            println!("Server got {}", message);
-        }
-    }
-
-    pub fn new_connection(&mut self) {
-        self.connections.push(Connection::new(self.tx.clone()));
-    }
-
-    pub fn close_connections(&mut self) {
-        for mut connection in self.connections.drain(..) {
-            connection.send(0);
-            connection.join();
-        }
+    async fn handle_user_disconnect(user_id: usize, users: &Users) {
+        println!("User {} disconnected", user_id);
+        users.write().await.remove(&user_id);
     }
 }

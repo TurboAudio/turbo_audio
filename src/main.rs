@@ -1,5 +1,5 @@
-mod server_tokio;
-use server_tokio::WebSocketServer;
+mod server;
+use server::WebSocketServer;
 
 mod audio;
 use audio::start_audio_loop;
