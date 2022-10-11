@@ -12,6 +12,7 @@ rand = "0.8"
 warp = "0.3"
 futures-util = "0.3.3"
 tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1.10"
 
 [dev-dependencies]
 futures-cpupool = "0.1"
