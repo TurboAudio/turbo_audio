@@ -2,7 +2,7 @@ mod audio;
 mod pipewire_listener;
 use audio::start_audio_loop;
 use clap::Parser;
-use pipewire_listener::start_pipewire_listener;
+use pipewire_listener::{start_pipewire_listener, PortConnections, StreamConnections};
 
 /// Haha brr
 #[derive(Parser, Debug)]
@@ -33,6 +33,12 @@ fn run_loop() {
 fn main() {
     let args = Args::parse();
     let (_stream, _rx) = start_audio_loop(args.device_name, args.jack, args.sample_rate);
-    start_pipewire_listener();
+
+    let connections = vec![StreamConnections {
+        output_stream: "spotify".to_string(),
+        input_stream: "ALSA plug-in [turbo_audio]".to_string(),
+        port_connections: PortConnections::AllInOrder,
+    }];
+    start_pipewire_listener(connections);
     run_loop();
 }

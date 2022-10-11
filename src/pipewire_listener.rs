@@ -424,29 +424,23 @@ impl PipewireState {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-enum PortConnections {
+pub enum PortConnections {
     AllInOrder,
     Only(Vec<(String, String)>),
 }
 
 #[derive(Debug, Clone)]
-struct StreamConnections {
-    output_stream: String,
-    input_stream: String,
-    port_connections: PortConnections,
+pub struct StreamConnections {
+    pub output_stream: String,
+    pub input_stream: String,
+    pub port_connections: PortConnections,
 }
 
-pub fn start_pipewire_listener() {
-    thread::spawn(pipewire_thread);
+pub fn start_pipewire_listener(stream_connections: Vec<StreamConnections>) {
+    thread::spawn(|| pipewire_thread(stream_connections));
 }
 
-fn pipewire_thread() -> Result<()> {
-    let connections = vec![StreamConnections {
-        output_stream: "spotify".to_string(),
-        input_stream: "ALSA plug-in [turbo_audio]".to_string(),
-        port_connections: PortConnections::AllInOrder,
-    }];
-
+fn pipewire_thread(stream_connections: Vec<StreamConnections>) -> Result<()> {
     let state = Rc::new(RefCell::new(PipewireState::new()));
 
     let mainloop = MainLoop::new().context("Couldn't create pipewire mainloop")?;
@@ -466,7 +460,7 @@ fn pipewire_thread() -> Result<()> {
         .add_listener_local()
         .global({
             let state = state.clone();
-            let connections = connections.clone();
+            let stream_connections = stream_connections.clone();
             let core = core.clone();
             move |global| match global.type_ {
                 pipewire::types::ObjectType::Node => {
@@ -480,7 +474,7 @@ fn pipewire_thread() -> Result<()> {
                         .borrow_mut()
                         .add_port(global)
                         .unwrap_or_else(|err| println!("{}", err));
-                    add_missing_connections(&core, &state.borrow(), &connections);
+                    add_missing_connections(&core, &state.borrow(), &stream_connections);
                 }
                 pipewire::types::ObjectType::Link => {
                     state
@@ -488,8 +482,13 @@ fn pipewire_thread() -> Result<()> {
                         .add_link(global)
                         .unwrap_or_else(|err| println!("{}", err));
                     if let Some(new_link) = state.borrow().links.get(&global.id) {
-                        check_remove_link(&state.borrow(), &registry, new_link, &connections)
-                            .unwrap_or_else(|err| println!("{}", err));
+                        check_remove_link(
+                            &state.borrow(),
+                            &registry,
+                            new_link,
+                            &stream_connections,
+                        )
+                        .unwrap_or_else(|err| println!("{}", err));
                     }
                 }
                 _ => {}
@@ -501,7 +500,7 @@ fn pipewire_thread() -> Result<()> {
                     .borrow_mut()
                     .remove_object(id)
                     .unwrap_or_else(|err| println!("{}", err));
-                add_missing_connections(&core, &state.borrow(), &connections);
+                add_missing_connections(&core, &state.borrow(), &stream_connections);
             }
         })
         .register();
