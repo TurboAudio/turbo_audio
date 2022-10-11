@@ -5,7 +5,7 @@ use std::sync::{self, mpsc::Receiver, mpsc::Sender};
 pub fn start_audio_loop(
     device_name: Option<String>,
     use_jack: bool,
-    sample_rate: u32, 
+    sample_rate: u32,
 ) -> (cpal::Stream, Receiver<i16>) {
     let audio_device = get_audio_device(device_name, use_jack);
     let input_config = get_input_config(&audio_device, sample_rate);
@@ -19,12 +19,13 @@ pub fn start_audio_loop(
 
 fn get_audio_device(device_name: Option<String>, use_jack: bool) -> Device {
     let host = if use_jack {
-        cpal::host_from_id(cpal::available_hosts()
-            .into_iter()
-            .find(|id| *id == cpal::HostId::Jack)
-            .expect(
-                "jack host unavailable",
-            )).expect("jack host unavailable")
+        cpal::host_from_id(
+            cpal::available_hosts()
+                .into_iter()
+                .find(|id| *id == cpal::HostId::Jack)
+                .expect("jack host unavailable"),
+        )
+        .expect("jack host unavailable")
     } else {
         cpal::default_host()
     };
@@ -39,7 +40,9 @@ fn get_audio_device(device_name: Option<String>, use_jack: bool) -> Device {
             .expect("Host has no audio device")
             .find(|device| device.name().unwrap() == device_name)
             .unwrap_or_else(|| panic!("No suitable audio device found with name {}", &device_name)),
-        None => host.default_input_device().expect("No default audio input found"),
+        None => host
+            .default_input_device()
+            .expect("No default audio input found"),
     }
 }
 
