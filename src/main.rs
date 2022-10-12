@@ -30,9 +30,9 @@ fn run_loop() {
     }
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let (_stream, _rx) = start_audio_loop(args.device_name, args.jack, args.sample_rate);
+    let (_stream, _rx) = start_audio_loop(args.device_name, args.jack, args.sample_rate)?;
 
     let connections = vec![StreamConnections {
         output_stream: "spotify".to_string(),
@@ -41,4 +41,5 @@ fn main() {
     }];
     start_pipewire_listener(connections);
     run_loop();
+    Ok(())
 }
