@@ -1,4 +1,6 @@
 mod server;
+use std::{thread, time};
+
 use server::WebSocketServer;
 
 mod audio;
@@ -9,10 +11,11 @@ fn main() {
     server.start_server(runtime.handle().clone());
     let (_stream, rx) = start_audio_loop();
 
-    for _ in 0..60 {
-        for patnais in &rx {
-            println!("{}", patnais);
-        }
+    loop {
+        thread::sleep(time::Duration::from_secs(1));
+        // for patnais in &rx {
+        //     println!("{}", patnais);
+        // }
     }
     server.close();
 }

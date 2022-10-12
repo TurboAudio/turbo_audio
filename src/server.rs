@@ -7,18 +7,34 @@ use std::{
 };
 
 use futures_util::{SinkExt, StreamExt, TryFutureExt};
+use serde::{Deserialize, Serialize};
 use tokio::{
     sync::{mpsc, RwLock},
     task::JoinHandle,
 };
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::{
+    hyper::Response,
     ws::{Message, WebSocket},
     Filter,
 };
 
 type Users = Arc<RwLock<HashMap<usize, mpsc::UnboundedSender<Message>>>>;
-type UserIdCounter = Arc<AtomicUsize>;
+type IdCounter = Arc<AtomicUsize>;
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+enum Resource {
+    Effect { id: usize, value: i32 },
+    Setting { id: usize, value: i32 },
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ResourceRequest {
+    resource_type: String,
+    value: i32,
+}
+
+type ResourceMap = Arc<RwLock<HashMap<usize, Resource>>>;
 
 pub struct WebSocketServer {
     users: Users,
@@ -34,21 +50,64 @@ impl WebSocketServer {
     }
 
     pub fn start_server(&mut self, handle: tokio::runtime::Handle) {
+        let user_id_counter = IdCounter::default();
+        let resources = ResourceMap::default();
+        let resources_id_counter = IdCounter::default();
         let users = self.users.clone();
-        let user_id_counter = UserIdCounter::default();
-        let routes = warp::path("echo")
+        let websocket_route = warp::path("ws")
             .and(warp::ws())
-            .and(warp::any().map(move || users.clone()))
             .and(warp::any().map(move || user_id_counter.clone()))
+            .and(warp::any().map(move || users.clone()))
             .map(
-                |ws: warp::ws::Ws, users: Users, user_id_counter: UserIdCounter| {
+                |ws: warp::ws::Ws, user_id_counter: IdCounter, users: Users| {
                     ws.on_upgrade(move |socket| {
                         WebSocketServer::handle_connection(user_id_counter, socket, users)
                     })
                 },
             );
 
-        self.server_handle = Some(handle.spawn(warp::serve(routes).run(([127, 0, 0, 1], 9001))));
+        let get_resource_clone = resources.clone();
+        let effect_get = warp::get()
+            .and(warp::path("effects"))
+            .and(warp::path::param::<usize>())
+            .and(warp::any().map(move || get_resource_clone.clone()))
+            .and_then(|effect_id, resources: ResourceMap| async move {
+                match resources.read().await.get(&effect_id) {
+                    Some(value) => Ok(Response::builder()
+                        .body(serde_json::to_string(value).unwrap())
+                        .unwrap()),
+                    None => Err(warp::reject::not_found()),
+                }
+            });
+
+        let effect_post = warp::post()
+            .and(warp::path("effects"))
+            .and(warp::body::json())
+            .and(warp::any().map(move || resources.clone()))
+            .and(warp::any().map(move || resources_id_counter.clone()))
+            .and_then(
+                |request: ResourceRequest, resources: ResourceMap, id_counter: IdCounter| {
+                    async move {
+                        let new_resource_id = id_counter.fetch_add(1, Ordering::Relaxed);
+                        let new_resource = match &request.resource_type[..] {
+                            "Setting" => Resource::Setting {
+                                id: new_resource_id,
+                                value: request.value,
+                            },
+                            "Effect" => Resource::Setting {
+                                id: new_resource_id,
+                                value: request.value,
+                            },
+                            _ => return Err(warp::reject::not_found()),
+                        };
+
+                        resources.write().await.insert(new_resource_id, new_resource.clone());
+                        Ok(Response::builder().body(serde_json::to_string(&new_resource).unwrap()).unwrap())
+                    }
+                },
+            );
+        let api = websocket_route.or(effect_get).or(effect_post);
+        self.server_handle = Some(handle.spawn(warp::serve(api).run(([127, 0, 0, 1], 9001))));
     }
 
     pub fn close(self) {
@@ -58,7 +117,7 @@ impl WebSocketServer {
         };
     }
 
-    async fn handle_connection(user_id: UserIdCounter, ws: WebSocket, users: Users) {
+    async fn handle_connection(user_id: IdCounter, ws: WebSocket, users: Users) {
         let (mut user_ws_tx, mut user_ws_rx) = ws.split();
         let (tx, rx) = mpsc::unbounded_channel();
         let mut rx = UnboundedReceiverStream::new(rx);
