@@ -1,24 +1,18 @@
 mod audio;
+mod config_parser;
 mod pipewire_listener;
+use anyhow::Result;
 use audio::start_audio_loop;
 use clap::Parser;
-use pipewire_listener::{start_pipewire_listener, PortConnections, StreamConnections};
+use config_parser::parse_config;
+use pipewire_listener::start_pipewire_listener;
 
-/// Haha brr
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, long_about = None)]
 struct Args {
-    /// Name of the input audio device to choose
-    #[arg(long)]
-    device_name: Option<String>,
-
-    /// Toggle if Jack should be used as the audio host
-    #[arg(long, default_value_t = false, action = clap::ArgAction::SetTrue)]
-    jack: bool,
-
-    /// Sample rate of the input stream
-    #[arg(long, default_value_t = 48000)]
-    sample_rate: u32,
+    /// Settings file
+    #[arg(long, default_value_t = String::from("Settings"))]
+    settings_file: String,
 }
 
 fn run_loop() {
@@ -30,15 +24,15 @@ fn run_loop() {
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     let args = Args::parse();
-    let (_stream, _rx) = start_audio_loop(args.device_name, args.jack, args.sample_rate);
-
-    let connections = vec![StreamConnections {
-        output_stream: "spotify".to_string(),
-        input_stream: "ALSA plug-in [turbo_audio]".to_string(),
-        port_connections: PortConnections::AllInOrder,
-    }];
-    start_pipewire_listener(connections);
+    let config = parse_config(&args.settings_file)?;
+    let (_stream, _rx) = start_audio_loop(
+        config.device_name,
+        config.jack,
+        config.sample_rate.try_into().unwrap(),
+    );
+    start_pipewire_listener(config.stream_connections);
     run_loop();
+    Ok(())
 }
