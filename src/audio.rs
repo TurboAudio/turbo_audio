@@ -1,5 +1,6 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig};
+use retry::{delay::Exponential, retry};
 use std::sync::{self, mpsc::Receiver, mpsc::Sender};
 
 pub fn start_audio_loop(
@@ -12,9 +13,10 @@ pub fn start_audio_loop(
     let sample_format = input_config.sample_format();
     let config = input_config.into();
 
-    // println!("Sample format: {:?}", sample_format);
-
-    start_stream(&config, &audio_device, &sample_format)
+    retry(Exponential::from_millis(250).take(3), || {
+        start_stream(&config, &audio_device, &sample_format)
+    })
+    .expect("Failed to start stream")
 }
 
 fn get_audio_device(device_name: Option<String>, use_jack: bool) -> Device {
@@ -75,16 +77,21 @@ fn start_stream(
     config: &StreamConfig,
     audio_device: &Device,
     sample_format: &SampleFormat,
-) -> (cpal::Stream, Receiver<i16>) {
-    let (tx, rx) = sync::mpsc::channel();
+) -> Result<(cpal::Stream, Receiver<i16>), cpal::BuildStreamError> {
+    println!("Starting audio stream");
 
+    let (tx, rx) = sync::mpsc::channel();
     let stream = match sample_format {
         SampleFormat::U16 => build_audio_stream::<u16>(audio_device, config, tx),
         SampleFormat::I16 => build_audio_stream::<i16>(audio_device, config, tx),
         SampleFormat::F32 => build_audio_stream::<f32>(audio_device, config, tx),
-    }
-    .expect("Failed to create audio stream");
-    // TODO handle error
+    };
 
-    (stream, rx)
+    match stream {
+        Ok(stream) => Ok((stream, rx)),
+        Err(err) => {
+            println!("Failed to start stream");
+            Err(err)
+        }
+    }
 }
