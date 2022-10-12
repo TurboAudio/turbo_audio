@@ -25,10 +25,17 @@ impl TurboAudioConfig {
 pub fn parse_config(config_name: &str) -> anyhow::Result<TurboAudioConfig> {
     let mut config = TurboAudioConfig::new();
 
-    let settings = Config::builder()
+    let settings = match Config::builder()
         .add_source(config::File::with_name(config_name))
         .build()
-        .unwrap();
+    {
+        Ok(settings) => settings,
+        Err(error) => {
+            println!("{:?}", error);
+            println!("Failed to get settings file. Default values used");
+            return Ok(config);
+        }
+    };
 
     read_optional_variable(&mut config.jack, settings.get_bool("jack"))?;
     read_optional_variable(&mut config.sample_rate, settings.get_int("sample_rate"))?;
