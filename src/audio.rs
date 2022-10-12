@@ -1,22 +1,40 @@
+use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig};
-use retry::{delay::Exponential, retry};
+use retry::{delay::Exponential, retry_with_index};
 use std::sync::{self, mpsc::Receiver, mpsc::Sender};
 
 pub fn start_audio_loop(
     device_name: Option<String>,
     use_jack: bool,
     sample_rate: u32,
-) -> (cpal::Stream, Receiver<i16>) {
+) -> anyhow::Result<(cpal::Stream, Receiver<i16>)> {
     let audio_device = get_audio_device(device_name, use_jack);
     let input_config = get_input_config(&audio_device, sample_rate);
     let sample_format = input_config.sample_format();
     let config = input_config.into();
 
-    retry(Exponential::from_millis(250).take(3), || {
-        start_stream(&config, &audio_device, &sample_format)
-    })
-    .expect("Failed to start stream")
+    let max_retries: usize = 3;
+    retry_with_index(
+        Exponential::from_millis(250).take(max_retries),
+        |retry_attempt| {
+            let stream_result = start_stream(&config, &audio_device, &sample_format);
+            match stream_result {
+                Ok(result) => {
+                    println!("Started audio stream");
+                    Ok(result)
+                }
+                Err(err) => {
+                    println!("Failed to start audio stream");
+                    if retry_attempt < max_retries.try_into().unwrap() {
+                        println!("Retrying to start audio stream...");
+                    }
+                    Err(err)
+                }
+            }
+        },
+    )
+    .with_context(|| "Failed to start stream")
 }
 
 fn get_audio_device(device_name: Option<String>, use_jack: bool) -> Device {
@@ -78,20 +96,12 @@ fn start_stream(
     audio_device: &Device,
     sample_format: &SampleFormat,
 ) -> Result<(cpal::Stream, Receiver<i16>), cpal::BuildStreamError> {
-    println!("Starting audio stream");
-
     let (tx, rx) = sync::mpsc::channel();
     let stream = match sample_format {
         SampleFormat::U16 => build_audio_stream::<u16>(audio_device, config, tx),
         SampleFormat::I16 => build_audio_stream::<i16>(audio_device, config, tx),
         SampleFormat::F32 => build_audio_stream::<f32>(audio_device, config, tx),
-    };
+    }?;
 
-    match stream {
-        Ok(stream) => Ok((stream, rx)),
-        Err(err) => {
-            println!("Failed to start stream");
-            Err(err)
-        }
-    }
+    Ok((stream, rx))
 }
