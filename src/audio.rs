@@ -12,7 +12,7 @@ pub fn start_audio_loop(
     let sample_format = input_config.sample_format();
     let config = input_config.into();
 
-    println!("Sample format: {:?}", sample_format);
+    // println!("Sample format: {:?}", sample_format);
 
     start_stream(&config, &audio_device, &sample_format)
 }
@@ -29,10 +29,6 @@ fn get_audio_device(device_name: Option<String>, use_jack: bool) -> Device {
     } else {
         cpal::default_host()
     };
-
-    for device in host.devices().unwrap() {
-        println!("Device name: {}", device.name().unwrap());
-    }
 
     match device_name {
         Some(device_name) => host
@@ -88,6 +84,7 @@ fn start_stream(
         SampleFormat::F32 => build_audio_stream::<f32>(audio_device, config, tx),
     }
     .expect("Failed to create audio stream");
+    // TODO handle error
 
     (stream, rx)
 }

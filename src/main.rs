@@ -1,6 +1,8 @@
 mod audio;
+mod pipewire_listener;
 use audio::start_audio_loop;
 use clap::Parser;
+use pipewire_listener::{start_pipewire_listener, PortConnections, StreamConnections};
 
 /// Haha brr
 #[derive(Parser, Debug)]
@@ -19,13 +21,24 @@ struct Args {
     sample_rate: u32,
 }
 
+fn run_loop() {
+    loop {
+        // for patnais in &rx {
+        //     println!("{}", patnais);
+        // }
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+}
+
 fn main() {
     let args = Args::parse();
-    let (_stream, rx) = start_audio_loop(args.device_name, args.jack, args.sample_rate);
+    let (_stream, _rx) = start_audio_loop(args.device_name, args.jack, args.sample_rate);
 
-    loop {
-        for patnais in &rx {
-            println!("{}", patnais);
-        }
-    }
+    let connections = vec![StreamConnections {
+        output_stream: "spotify".to_string(),
+        input_stream: "ALSA plug-in [turbo_audio]".to_string(),
+        port_connections: PortConnections::AllInOrder,
+    }];
+    start_pipewire_listener(connections);
+    run_loop();
 }
