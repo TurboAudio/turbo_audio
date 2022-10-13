@@ -4,7 +4,7 @@ mod pipewire_listener;
 use anyhow::Result;
 use audio::start_audio_loop;
 use clap::Parser;
-use config_parser::{parse_config, TurboAudioConfig};
+use config_parser::{TurboAudioConfig};
 use pipewire_listener::start_pipewire_listener;
 
 #[derive(Parser, Debug)]
