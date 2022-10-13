@@ -4,7 +4,7 @@ mod pipewire_listener;
 use anyhow::Result;
 use audio::start_audio_loop;
 use clap::Parser;
-use config_parser::parse_config;
+use config_parser::{parse_config, TurboAudioConfig};
 use pipewire_listener::start_pipewire_listener;
 
 #[derive(Parser, Debug)]
@@ -25,14 +25,18 @@ fn run_loop() {
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
-    let config = parse_config(&args.settings_file)?;
-    let (_stream, _rx) = start_audio_loop(
-        config.device_name,
-        config.jack,
-        config.sample_rate.try_into().unwrap(),
-    );
-    start_pipewire_listener(config.stream_connections);
+    let Args { settings_file } = Args::parse();
+    let TurboAudioConfig {
+        device_name,
+        jack,
+        sample_rate,
+        stream_connections,
+    } = TurboAudioConfig::builder()
+        .add_source(&settings_file)
+        .build()?;
+
+    let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap());
+    start_pipewire_listener(stream_connections);
     run_loop();
     Ok(())
 }
