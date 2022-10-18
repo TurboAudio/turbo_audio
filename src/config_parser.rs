@@ -10,35 +10,11 @@ pub struct TurboAudioConfig {
     pub sample_rate: i64,
     pub stream_connections: Vec<StreamConnections>,
 }
-pub struct TurboAudioConfigBuilder(Option<String>);
 
 impl TurboAudioConfig {
-    pub fn builder() -> TurboAudioConfigBuilder {
-        TurboAudioConfigBuilder(None)
-    }
-
-    pub fn default() -> Self {
-        Self {
-            device_name: None,
-            jack: false,
-            sample_rate: 48000,
-            stream_connections: Vec::new(),
-        }
-    }
-}
-
-impl TurboAudioConfigBuilder {
-    pub fn add_source(mut self, config_name: &str) -> TurboAudioConfigBuilder {
-        self.0 = config_name.to_owned().into();
-        self
-    }
-
-    pub fn build(self) -> anyhow::Result<TurboAudioConfig> {
-        let config_name = self
-            .0
-            .ok_or_else(|| anyhow::anyhow!("source was not added"))?;
+    pub fn new(config_file_name: &str) -> anyhow::Result<TurboAudioConfig>  {
         let settings = match Config::builder()
-            .add_source(config::File::with_name(&config_name))
+            .add_source(config::File::with_name(config_file_name))
             .build()
         {
             Ok(settings) => settings,
@@ -115,15 +91,23 @@ impl TurboAudioConfigBuilder {
 
         let jack = read_optional_variable(settings.get_bool("jack"))?.unwrap_or(false);
         let sample_rate = read_optional_variable(settings.get_int("sample_rate"))?.unwrap_or(48000);
-        let device_name = read_optional_variable(settings.get_string("device_name"))?
-            .unwrap_or_else(|| "Default Input Device".to_string());
+        let device_name = read_optional_variable(settings.get_string("device_name"))?;
 
         Ok(TurboAudioConfig {
-            device_name: device_name.into(),
+            device_name,
             jack,
             sample_rate,
             stream_connections,
         })
+    }
+
+    pub fn default() -> Self {
+        Self {
+            device_name: None,
+            jack: false,
+            sample_rate: 48000,
+            stream_connections: Vec::new(),
+        }
     }
 }
 

@@ -31,9 +31,7 @@ fn main() -> Result<()> {
         jack,
         sample_rate,
         stream_connections,
-    } = TurboAudioConfig::builder()
-        .add_source(&settings_file)
-        .build()?;
+    } = TurboAudioConfig::new(&settings_file)?;
 
     let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap());
     start_pipewire_listener(stream_connections);
