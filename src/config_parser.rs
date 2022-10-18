@@ -12,7 +12,7 @@ pub struct TurboAudioConfig {
 }
 
 impl TurboAudioConfig {
-    pub fn new(config_file_name: &str) -> anyhow::Result<TurboAudioConfig>  {
+    pub fn new(config_file_name: &str) -> anyhow::Result<TurboAudioConfig> {
         let settings = match Config::builder()
             .add_source(config::File::with_name(config_file_name))
             .build()
@@ -24,7 +24,6 @@ impl TurboAudioConfig {
                 return Ok(TurboAudioConfig::default());
             }
         };
-        
 
         let mut stream_connections = Vec::new();
         for connection in settings.get_array("connections")? {
