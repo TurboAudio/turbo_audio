@@ -52,6 +52,132 @@ enum PipewireObjectType {
     Link,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub enum PortConnections {
+    AllInOrder,
+    Only(Vec<(String, String)>),
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamConnections {
+    pub output_stream: String,
+    pub input_stream: String,
+    pub port_connections: PortConnections,
+}
+
+pub struct PipewireController {
+    sender: pipewire::channel::Sender<Vec<StreamConnections>>,
+}
+
+impl PipewireController {
+    pub fn new() -> Self {
+        let (sender, receiver) = pipewire::channel::channel();
+        thread::spawn(move || pipewire_thread(vec![], receiver));
+        PipewireController { sender }
+    }
+
+    pub fn set_stream_connections(&mut self, stream_connections: Vec<StreamConnections>) {
+        let _ = self.sender.send(stream_connections);
+    }
+}
+
+fn pipewire_thread(
+    stream_connections: Vec<StreamConnections>,
+    receiver: pipewire::channel::Receiver<Vec<StreamConnections>>,
+) -> Result<()> {
+    let state = Rc::new(RefCell::new(PipewireState::new()));
+    let stream_connections = Rc::new(RefCell::new(stream_connections));
+
+    let mainloop = MainLoop::new().context("Couldn't create pipewire mainloop")?;
+    let context = pipewire::Context::new(&mainloop).context("Coudln't create pipewire context")?;
+    let core = Rc::new(
+        context
+            .connect(None)
+            .context("Couldn't create pipewire core")?,
+    );
+    let registry = Rc::new(
+        core.get_registry()
+            .context("Couldn't create pipewire registry")?,
+    );
+
+    let _listener = registry
+        .add_listener_local()
+        .global({
+            let state = state.clone();
+            let stream_connections = stream_connections.clone();
+            let core = core.clone();
+            let registry = registry.clone();
+            move |global| match global.type_ {
+                pipewire::types::ObjectType::Node => {
+                    state
+                        .borrow_mut()
+                        .add_node(global)
+                        .unwrap_or_else(|err| println!("{}", err));
+                }
+                pipewire::types::ObjectType::Port => {
+                    state
+                        .borrow_mut()
+                        .add_port(global)
+                        .unwrap_or_else(|err| println!("{}", err));
+                    add_missing_connections(
+                        &core,
+                        &state.borrow(),
+                        &stream_connections.borrow_mut(),
+                    );
+                }
+                pipewire::types::ObjectType::Link => {
+                    state
+                        .borrow_mut()
+                        .add_link(global)
+                        .unwrap_or_else(|err| println!("{}", err));
+                    if let Some(new_link) = state.borrow().links.get(&global.id) {
+                        check_remove_link(
+                            &state.borrow(),
+                            &registry,
+                            new_link,
+                            &stream_connections.borrow_mut(),
+                        )
+                        .unwrap_or_else(|err| println!("{}", err));
+                    }
+                }
+                _ => {}
+            }
+        })
+        .global_remove({
+            let stream_connections = stream_connections.clone();
+            let state = state.clone();
+            let core = core.clone();
+            move |id| {
+                state
+                    .borrow_mut()
+                    .remove_object(id)
+                    .unwrap_or_else(|err| println!("{}", err));
+                add_missing_connections(&core, &state.borrow(), &stream_connections.borrow_mut());
+            }
+        })
+        .register();
+
+    let _receiver = receiver.attach(&mainloop, {
+        move |new_stream_connections| {
+            *stream_connections.borrow_mut() = new_stream_connections;
+            for link in state.borrow().links.values().clone() {
+                check_remove_link(
+                    &state.borrow(),
+                    &registry,
+                    link,
+                    &stream_connections.borrow_mut(),
+                )
+                .unwrap_or_else(|err| println!("{}", err));
+            }
+            add_missing_connections(&core, &state.borrow(), &stream_connections.borrow_mut());
+        }
+    });
+
+    mainloop.run();
+    Ok(())
+}
+
 struct PipewireState {
     nodes: HashMap<u32, PipewireNode>,
     ports: HashMap<u32, PipewirePort>,
@@ -420,93 +546,6 @@ impl PipewireState {
 
         Ok(())
     }
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub enum PortConnections {
-    AllInOrder,
-    Only(Vec<(String, String)>),
-}
-
-#[derive(Debug, Clone)]
-pub struct StreamConnections {
-    pub output_stream: String,
-    pub input_stream: String,
-    pub port_connections: PortConnections,
-}
-
-pub fn start_pipewire_listener(stream_connections: Vec<StreamConnections>) {
-    thread::spawn(|| pipewire_thread(stream_connections));
-}
-
-fn pipewire_thread(stream_connections: Vec<StreamConnections>) -> Result<()> {
-    let state = Rc::new(RefCell::new(PipewireState::new()));
-
-    let mainloop = MainLoop::new().context("Couldn't create pipewire mainloop")?;
-    let context = pipewire::Context::new(&mainloop).context("Coudln't create pipewire context")?;
-    let core = Rc::new(
-        context
-            .connect(None)
-            .context("Couldn't create pipewire core")?,
-    );
-    let registry = Rc::new(
-        core.get_registry()
-            .context("Couldn't create pipewire registry")?,
-    );
-
-    let _listener = registry
-        .clone()
-        .add_listener_local()
-        .global({
-            let state = state.clone();
-            let stream_connections = stream_connections.clone();
-            let core = core.clone();
-            move |global| match global.type_ {
-                pipewire::types::ObjectType::Node => {
-                    state
-                        .borrow_mut()
-                        .add_node(global)
-                        .unwrap_or_else(|err| println!("{}", err));
-                }
-                pipewire::types::ObjectType::Port => {
-                    state
-                        .borrow_mut()
-                        .add_port(global)
-                        .unwrap_or_else(|err| println!("{}", err));
-                    add_missing_connections(&core, &state.borrow(), &stream_connections);
-                }
-                pipewire::types::ObjectType::Link => {
-                    state
-                        .borrow_mut()
-                        .add_link(global)
-                        .unwrap_or_else(|err| println!("{}", err));
-                    if let Some(new_link) = state.borrow().links.get(&global.id) {
-                        check_remove_link(
-                            &state.borrow(),
-                            &registry,
-                            new_link,
-                            &stream_connections,
-                        )
-                        .unwrap_or_else(|err| println!("{}", err));
-                    }
-                }
-                _ => {}
-            }
-        })
-        .global_remove({
-            move |id| {
-                state
-                    .borrow_mut()
-                    .remove_object(id)
-                    .unwrap_or_else(|err| println!("{}", err));
-                add_missing_connections(&core, &state.borrow(), &stream_connections);
-            }
-        })
-        .register();
-
-    mainloop.run();
-    Ok(())
 }
 
 fn get_nodes<'a>(state: &'a PipewireState, stream_name: &str) -> Vec<&'a PipewireNode> {
