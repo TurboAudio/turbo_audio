@@ -15,15 +15,6 @@ struct Args {
     settings_file: String,
 }
 
-fn run_loop() {
-    loop {
-        // for patnais in &rx {
-        //     println!("{}", patnais);
-        // }
-        std::thread::sleep(std::time::Duration::from_secs(1));
-    }
-}
-
 fn main() -> Result<()> {
     let Args { settings_file } = Args::parse();
     let TurboAudioConfig {
@@ -34,10 +25,15 @@ fn main() -> Result<()> {
     } = TurboAudioConfig::new(&settings_file)?;
 
     let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())?;
-    let mut pipewire_controller = PipewireController::new();
+    let pipewire_controller = PipewireController::new();
     std::thread::sleep(std::time::Duration::from_secs(3));
-    pipewire_controller.set_stream_connections(stream_connections);
-    
-    run_loop();
-    Ok(())
+    pipewire_controller.set_stream_connections(stream_connections)?;
+
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        println!("{:#?}", pipewire_controller.get_streams());
+        println!("----");
+    }
+
+    // Ok(())
 }

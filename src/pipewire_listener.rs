@@ -9,6 +9,7 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
+    sync::{Arc, Mutex},
     thread,
 };
 
@@ -66,27 +67,68 @@ pub struct StreamConnections {
     pub port_connections: PortConnections,
 }
 
+#[derive(Debug)]
+pub struct StreamDescriptor {
+    pub name: String,
+    pub inputs: Vec<String>,
+    pub ouputs: Vec<String>,
+}
+
 pub struct PipewireController {
     sender: pipewire::channel::Sender<Vec<StreamConnections>>,
+    state: Arc<Mutex<PipewireState>>,
 }
 
 impl PipewireController {
     pub fn new() -> Self {
         let (sender, receiver) = pipewire::channel::channel();
-        thread::spawn(move || pipewire_thread(vec![], receiver));
-        PipewireController { sender }
+        let state = Arc::new(Mutex::new(PipewireState::new()));
+        thread::spawn({
+            let state = state.clone();
+            move || pipewire_thread(vec![], receiver, Arc::clone(&state))
+        });
+        PipewireController {
+            sender,
+            state: Arc::clone(&state),
+        }
     }
 
-    pub fn set_stream_connections(&mut self, stream_connections: Vec<StreamConnections>) {
-        let _ = self.sender.send(stream_connections);
+    pub fn set_stream_connections(&self, stream_connections: Vec<StreamConnections>) -> Result<()> {
+        let result = self.sender.send(stream_connections);
+        if result.is_err() {
+            return Err(anyhow!("Failed to change pipewire connections"));
+        }
+        Ok(())
+    }
+
+    pub fn get_streams(&self) -> Result<Vec<StreamDescriptor>> {
+        let mut stream_descriptors = Vec::new();
+        let state = self.state.lock().unwrap();
+        for node in state.nodes.values() {
+            let mut descriptor = StreamDescriptor {
+                name: node.name.clone(),
+                inputs: vec![],
+                ouputs: vec![],
+            };
+            for input_id in &node.input_ports {
+                let port = state.ports.get(input_id).context("Port doesn't exist")?;
+                descriptor.inputs.push(port.name.clone());
+            }
+            for output_id in &node.output_ports {
+                let port = state.ports.get(output_id).context("Port doesn't exist")?;
+                descriptor.ouputs.push(port.name.clone());
+            }
+            stream_descriptors.push(descriptor);
+        }
+        Ok(stream_descriptors)
     }
 }
 
 fn pipewire_thread(
     stream_connections: Vec<StreamConnections>,
     receiver: pipewire::channel::Receiver<Vec<StreamConnections>>,
+    state: Arc<Mutex<PipewireState>>,
 ) -> Result<()> {
-    let state = Rc::new(RefCell::new(PipewireState::new()));
     let stream_connections = Rc::new(RefCell::new(stream_connections));
 
     let mainloop = MainLoop::new().context("Couldn't create pipewire mainloop")?;
@@ -110,30 +152,26 @@ fn pipewire_thread(
             let registry = registry.clone();
             move |global| match global.type_ {
                 pipewire::types::ObjectType::Node => {
+                    let mut state = state.lock().unwrap();
                     state
-                        .borrow_mut()
                         .add_node(global)
                         .unwrap_or_else(|err| println!("{}", err));
                 }
                 pipewire::types::ObjectType::Port => {
+                    let mut state = state.lock().unwrap();
                     state
-                        .borrow_mut()
                         .add_port(global)
                         .unwrap_or_else(|err| println!("{}", err));
-                    add_missing_connections(
-                        &core,
-                        &state.borrow(),
-                        &stream_connections.borrow_mut(),
-                    );
+                    add_missing_connections(&core, &state, &stream_connections.borrow_mut());
                 }
                 pipewire::types::ObjectType::Link => {
+                    let mut state = state.lock().unwrap();
                     state
-                        .borrow_mut()
                         .add_link(global)
                         .unwrap_or_else(|err| println!("{}", err));
-                    if let Some(new_link) = state.borrow().links.get(&global.id) {
+                    if let Some(new_link) = state.links.get(&global.id) {
                         check_remove_link(
-                            &state.borrow(),
+                            &state,
                             &registry,
                             new_link,
                             &stream_connections.borrow_mut(),
@@ -149,28 +187,24 @@ fn pipewire_thread(
             let state = state.clone();
             let core = core.clone();
             move |id| {
+                let mut state = state.lock().unwrap();
                 state
-                    .borrow_mut()
                     .remove_object(id)
                     .unwrap_or_else(|err| println!("{}", err));
-                add_missing_connections(&core, &state.borrow(), &stream_connections.borrow_mut());
+                add_missing_connections(&core, &state, &stream_connections.borrow_mut());
             }
         })
         .register();
 
     let _receiver = receiver.attach(&mainloop, {
         move |new_stream_connections| {
+            let state = state.lock().unwrap();
             *stream_connections.borrow_mut() = new_stream_connections;
-            for link in state.borrow().links.values().clone() {
-                check_remove_link(
-                    &state.borrow(),
-                    &registry,
-                    link,
-                    &stream_connections.borrow_mut(),
-                )
-                .unwrap_or_else(|err| println!("{}", err));
+            for link in state.links.values().clone() {
+                check_remove_link(&state, &registry, link, &stream_connections.borrow_mut())
+                    .unwrap_or_else(|err| println!("{}", err));
             }
-            add_missing_connections(&core, &state.borrow(), &stream_connections.borrow_mut());
+            add_missing_connections(&core, &state, &stream_connections.borrow_mut());
         }
     });
 
@@ -198,6 +232,7 @@ impl PipewireState {
             id_types: HashMap::new(),
         }
     }
+
     fn get_connected_port_ids_between_node_ids(
         &self,
         output_node_id: &u32,
