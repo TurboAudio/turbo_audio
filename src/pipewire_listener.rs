@@ -82,9 +82,9 @@ pub struct PipewireController {
 impl PipewireController {
     pub fn new() -> Self {
         let (sender, receiver) = pipewire::channel::channel();
-        let state = Arc::new(Mutex::new(PipewireState::new()));
+        let state = Arc::default();
         thread::spawn({
-            let state = state.clone();
+            let state = Arc::clone(&state);
             move || pipewire_thread(vec![], receiver, Arc::clone(&state))
         });
         PipewireController {
@@ -212,6 +212,7 @@ fn pipewire_thread(
     Ok(())
 }
 
+#[derive(Default)]
 struct PipewireState {
     nodes: HashMap<u32, PipewireNode>,
     ports: HashMap<u32, PipewirePort>,
@@ -222,17 +223,6 @@ struct PipewireState {
 }
 
 impl PipewireState {
-    fn new() -> Self {
-        Self {
-            nodes: HashMap::new(),
-            ports: HashMap::new(),
-            links: HashMap::new(),
-            output_to_input_port_links: HashMap::new(),
-            node_name_to_ids: HashMap::new(),
-            id_types: HashMap::new(),
-        }
-    }
-
     fn get_connected_port_ids_between_node_ids(
         &self,
         output_node_id: &u32,
