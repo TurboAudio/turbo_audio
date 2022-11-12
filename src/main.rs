@@ -26,14 +26,9 @@ fn main() -> Result<()> {
 
     let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())?;
     let pipewire_controller = PipewireController::new();
-    std::thread::sleep(std::time::Duration::from_secs(3));
     pipewire_controller.set_stream_connections(stream_connections)?;
 
     loop {
         std::thread::sleep(std::time::Duration::from_secs(5));
-        println!("{:#?}", pipewire_controller.get_streams());
-        println!("----");
     }
-
-    // Ok(())
 }
