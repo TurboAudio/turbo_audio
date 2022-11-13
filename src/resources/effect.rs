@@ -62,12 +62,9 @@ pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &
             g: color.g / 2,
             b: color.b / 2,
         };
-        match leds.get_mut(next_position) {
-            Some(led) => {
-                led.add(&next_color);
-                next_riples.push((next_position, next_color, *direction));
-            }
-            None => {}
+        if let Some(led) = leds.get_mut(next_position) {
+            led.add(&next_color);
+            next_riples.push((next_position, next_color, *direction));
         }
     }
     for _ in 0..settings.rain_speed {
