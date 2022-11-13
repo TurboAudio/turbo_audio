@@ -16,7 +16,7 @@ impl LedStrip {
             size: 0,
             colors: vec![],
             effects: vec![],
-            used_led_count: 0
+            used_led_count: 0,
         }
     }
 
@@ -28,7 +28,8 @@ impl LedStrip {
                 to_remove.insert(*effect_id);
             }
         }
-        self.effects.retain(|(effect_id, _interval)| !to_remove.contains(effect_id));
+        self.effects
+            .retain(|(effect_id, _interval)| !to_remove.contains(effect_id));
         self.colors.resize(size, Color::new());
     }
 
@@ -37,7 +38,10 @@ impl LedStrip {
             return false;
         }
 
-        let interval = (self.used_led_count.saturating_sub(1), self.used_led_count + size - 1);
+        let interval = (
+            self.used_led_count.saturating_sub(1),
+            self.used_led_count + size - 1,
+        );
         self.effects.push((effect_id, interval));
         self.used_led_count += size;
         true

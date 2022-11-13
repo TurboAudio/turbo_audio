@@ -63,18 +63,22 @@ fn test_and_run_loop() {
         tick(&mut ledstrips, &mut effects, &mut settings);
     }
     println!("{:?}", ledstrips);
-    
+
     tick(&mut ledstrips, &mut effects, &mut settings);
     println!("{:?}", ledstrips);
-    
-    settings.get_mut(&0).unwrap().mut_moody().color = Color {r: 255, g:255, b:255};
+
+    settings.get_mut(&0).unwrap().mut_moody().color = Color {
+        r: 255,
+        g: 255,
+        b: 255,
+    };
     tick(&mut ledstrips, &mut effects, &mut settings);
     println!("{:?}", ledstrips);
-    
+
     ledstrips.get_mut(0).unwrap().set_led_count(3);
     tick(&mut ledstrips, &mut effects, &mut settings);
     println!("{:?}", ledstrips);
-    
+
     ledstrips.get_mut(0).unwrap().set_led_count(10);
     tick(&mut ledstrips, &mut effects, &mut settings);
     println!("{:?}", ledstrips);
