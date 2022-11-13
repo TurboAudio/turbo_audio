@@ -1,14 +1,4 @@
-use super::color::Color;
-
-#[derive(Clone, Copy)]
-pub struct MoodySettings {
-    pub color: Color,
-}
-
-#[derive(Clone, Copy)]
-pub struct RaindropSettings {
-    pub rain_speed: i32,
-}
+use super::effects::{moody::MoodySettings, raindrop::RaindropSettings};
 
 pub enum Settings {
     Moody(MoodySettings),

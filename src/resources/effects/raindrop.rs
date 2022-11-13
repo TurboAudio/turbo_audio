@@ -1,12 +1,9 @@
-use super::{
-    color::Color,
-    settings::{MoodySettings, RaindropSettings},
-};
+use crate::resources::color::Color;
 use rand::Rng;
 
-pub struct Moody {
-    pub id: i32,
-    pub settings_id: i32,
+#[derive(Clone, Copy)]
+pub struct RaindropSettings {
+    pub rain_speed: i32,
 }
 
 pub struct Raindrops {
@@ -21,17 +18,6 @@ pub enum RipleDirection {
 }
 pub struct RaindropState {
     pub riples: Vec<(usize, Color, RipleDirection)>,
-}
-
-pub enum Effect {
-    Moody(Moody),
-    Raindrop(Raindrops),
-}
-
-pub fn update_moody(leds: &mut [Color], settings: &MoodySettings) {
-    for led in leds {
-        *led = settings.color;
-    }
 }
 
 pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &mut RaindropState) {

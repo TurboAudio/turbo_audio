@@ -4,9 +4,8 @@ mod pipewire_listener;
 mod resources;
 use resources::{
     color::Color,
-    effect::{update_moody, update_raindrop, Effect, Moody},
+    effects::{moody::update_moody, raindrop::update_raindrop},
     ledstrip::LedStrip,
-    settings::{MoodySettings, Settings},
 };
 use std::collections::HashMap;
 
@@ -17,8 +16,12 @@ use config_parser::TurboAudioConfig;
 use pipewire_listener::start_pipewire_listener;
 
 use crate::resources::{
-    effect::{RaindropState, Raindrops},
-    settings::RaindropSettings,
+    effects::{
+        moody::{Moody, MoodySettings},
+        raindrop::{RaindropSettings, RaindropState, Raindrops},
+        Effect,
+    },
+    settings::Settings,
 };
 
 #[derive(Parser, Debug)]
