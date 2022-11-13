@@ -1,4 +1,7 @@
-use super::{color::Color, settings::{MoodySettings, RaindropSettings}};
+use super::{
+    color::Color,
+    settings::{MoodySettings, RaindropSettings},
+};
 use rand::Rng;
 
 pub struct Moody {
@@ -14,7 +17,7 @@ pub struct Raindrops {
 #[derive(Clone, Copy)]
 pub enum RipleDirection {
     Left,
-    Right
+    Right,
 }
 pub struct RaindropState {
     pub riples: Vec<(usize, Color, RipleDirection)>,
@@ -46,7 +49,7 @@ pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &
                     continue;
                 }
                 current_position - SHIFT
-            },
+            }
             RipleDirection::Right => {
                 if current_position + SHIFT >= color_size {
                     continue;
@@ -54,22 +57,30 @@ pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &
                 (current_position + SHIFT) as usize
             }
         };
-        let next_color = Color { r: color.r / 2, g: color.g / 2, b: color.b / 2 };
+        let next_color = Color {
+            r: color.r / 2,
+            g: color.g / 2,
+            b: color.b / 2,
+        };
         match leds.get_mut(next_position) {
             Some(led) => {
                 led.add(&next_color);
                 next_riples.push((next_position, next_color, *direction));
-            },
-            None => {},
+            }
+            None => {}
         }
-    } 
+    }
     for _ in 0..settings.rain_speed {
         let new_position = rand::thread_rng().gen_range(0..color_size);
-        let next_color = Color { r: 255, g: 255, b:255};
+        let next_color = Color {
+            r: 255,
+            g: 255,
+            b: 255,
+        };
         *leds.get_mut(new_position).expect("Rng lib failed.") = next_color;
         next_riples.push((new_position, next_color, RipleDirection::Left));
         next_riples.push((new_position, next_color, RipleDirection::Right));
     }
-    
+
     state.riples = next_riples;
 }
