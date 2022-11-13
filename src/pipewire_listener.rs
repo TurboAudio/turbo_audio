@@ -101,6 +101,7 @@ impl PipewireController {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_streams(&self) -> Result<Vec<StreamDescriptor>> {
         let mut stream_descriptors = Vec::new();
         let state = self.state.lock().unwrap();
