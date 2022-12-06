@@ -136,12 +136,12 @@ fn tick(
             let setting_id = effect_settings
                 .get(effect_id)
                 .expect("Setting id not found");
-            let setting = settings.get_mut(setting_id).expect("Setting not found");
+            let setting = settings.get_mut(setting_id);
             match (effect, setting) {
-                (Effect::Moody(_moody), Settings::Moody(settings)) => {
+                (Effect::Moody(_moody), Some(Settings::Moody(settings))) => {
                     update_moody(leds, settings);
                 }
-                (Effect::Raindrop(raindrop), Settings::Raindrop(settings)) => {
+                (Effect::Raindrop(raindrop), Some(Settings::Raindrop(settings))) => {
                     update_raindrop(leds, settings, &mut raindrop.state);
                 }
                 _ => panic!("Effect doesn't match settings"),
