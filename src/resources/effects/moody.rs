@@ -2,7 +2,6 @@ use crate::resources::color::Color;
 
 pub struct Moody {
     pub id: i32,
-    pub settings_id: i32,
 }
 
 #[derive(Clone, Copy)]

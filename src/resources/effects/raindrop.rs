@@ -8,9 +8,9 @@ pub struct RaindropSettings {
 
 pub struct Raindrops {
     pub id: i32,
-    pub settings_id: i32,
     pub state: RaindropState,
 }
+
 #[derive(Clone, Copy)]
 pub enum RipleDirection {
     Left,
