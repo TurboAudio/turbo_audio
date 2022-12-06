@@ -70,10 +70,12 @@ fn test_and_run_loop() {
     tick(&mut ledstrips, &mut effects, &mut settings);
     println!("{:?}", ledstrips);
 
-    settings.get_mut(&0).unwrap().mut_moody().color = Color {
-        r: 255,
-        g: 255,
-        b: 255,
+    if let Settings::Moody(ref mut color) = settings.get_mut(&0).unwrap() {
+        color.color = Color {
+            r: 255,
+            g: 255,
+            b: 255,
+        }
     };
     tick(&mut ledstrips, &mut effects, &mut settings);
     println!("{:?}", ledstrips);
@@ -102,22 +104,20 @@ fn tick(
                 .colors
                 .get_mut(interval.0..=interval.1)
                 .expect("Ledstrip interval out of bounds");
-            match effects
+            let effect = effects
                 .get_mut(effect_id)
-                .expect("Effect id was not found.")
-            {
-                Effect::Moody(moody) => {
-                    let settings = settings
-                        .get_mut(&moody.settings_id)
-                        .expect("Setting id was not found.");
-                    update_moody(leds, settings.moody());
+                .expect("Effect id was not found.");
+            let setting = settings
+                .get_mut(effect.settings_id())
+                .expect("Setting id not found");
+            match (effect, setting) {
+                (Effect::Moody(_moody), Settings::Moody(settings)) => {
+                    update_moody(leds, settings);
                 }
-                Effect::Raindrop(raindrop) => {
-                    let settings = settings
-                        .get_mut(&raindrop.settings_id)
-                        .expect("Setting id was not found.");
-                    update_raindrop(leds, settings.raindrop(), &mut raindrop.state);
+                (Effect::Raindrop(raindrop), Settings::Raindrop(settings)) => {
+                    update_raindrop(leds, settings, &mut raindrop.state);
                 }
+                _ => panic!("Effect doesn't match settings"),
             }
         }
     }
