@@ -32,7 +32,7 @@ struct Args {
     settings_file: String,
 }
 
-fn test_and_run_loop() {
+fn test_base_relations() {
     let mut settings: HashMap<i32, Settings> = HashMap::default();
     let mut effects: HashMap<i32, Effect> = HashMap::default();
     let mut effect_settings: HashMap<i32, i32> = HashMap::default();
@@ -158,10 +158,6 @@ fn main() -> Result<()> {
     let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())?;
     let pipewire_controller = PipewireController::new();
     pipewire_controller.set_stream_connections(stream_connections)?;
-    test_and_run_loop();
-
-    loop {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-    }
+    test_base_relations();
     Ok(())
 }
