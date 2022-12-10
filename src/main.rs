@@ -3,31 +3,19 @@ mod config_parser;
 mod connections;
 mod pipewire_listener;
 mod resources;
+use std::{collections::HashMap, net::{SocketAddrV4, Ipv4Addr}};
+
 use connections::{tcp::TcpConnection, Connection, terminal::UsbConnection};
 use resources::{
     color::Color,
-    effects::{moody::update_moody, raindrop::update_raindrop},
-    ledstrip::LedStrip,
+    effects::{moody::{update_moody, MoodySettings, Moody}, raindrop::{update_raindrop, RaindropSettings, Raindrops, RaindropState}, Effect},
+    ledstrip::LedStrip, settings::Settings,
 };
-use std::{
-    collections::HashMap,
-    net::{Ipv4Addr, SocketAddrV4},
-};
-
 use anyhow::Result;
 use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
-use pipewire_listener::start_pipewire_listener;
-
-use crate::resources::{
-    effects::{
-        moody::{Moody, MoodySettings},
-        raindrop::{RaindropSettings, RaindropState, Raindrops},
-        Effect,
-    },
-    settings::Settings,
-};
+use pipewire_listener::PipewireController;
 
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
@@ -168,7 +156,8 @@ fn main() -> Result<()> {
     } = TurboAudioConfig::new(&settings_file)?;
 
     let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())?;
-    start_pipewire_listener(stream_connections);
+    let pipewire_controller = PipewireController::new();
+    pipewire_controller.set_stream_connections(stream_connections)?;
     test_and_run_loop();
     Ok(())
 }
