@@ -1,13 +1,14 @@
+use ring_channel::*;
 use std::{
     io::Write,
     net::TcpStream,
-    sync::mpsc::{channel, Sender},
+    num::NonZeroUsize,
     thread::{self, JoinHandle},
     time::Duration,
 };
 
 pub struct TcpConnection {
-    pub data_queue: Sender<Vec<u8>>,
+    pub data_queue: ring_channel::RingSender<Vec<u8>>,
     connection_thread: JoinHandle<()>,
 }
 
@@ -26,8 +27,11 @@ impl TcpConnection {
             .expect("Error when trying to join connection thread");
     }
 
-    fn start_connection_thread(ip: std::net::SocketAddr) -> (Sender<Vec<u8>>, JoinHandle<()>) {
-        let (tx, rx) = channel::<Vec<u8>>();
+    fn start_connection_thread(
+        ip: std::net::SocketAddr,
+    ) -> (ring_channel::RingSender<Vec<u8>>, JoinHandle<()>) {
+        const SEND_BUFFER_SIZE: usize = 100;
+        let (tx, mut rx) = ring_channel::<Vec<u8>>(NonZeroUsize::new(SEND_BUFFER_SIZE).unwrap());
         let connection_thread = thread::spawn(move || {
             const MAX_RECONNECTION_ATTEMPTS: i32 = 5;
             for reconnect_attempt in 0..MAX_RECONNECTION_ATTEMPTS {
