@@ -36,8 +36,12 @@ impl TcpConnection {
             const MAX_RECONNECTION_ATTEMPTS: i32 = 5;
             for reconnect_attempt in 0..MAX_RECONNECTION_ATTEMPTS {
                 let connection = TcpConnection::attempt_connection(ip);
-                if connection.is_none() && reconnect_attempt == 0 {
-                    return;
+                if connection.is_none() {
+                    if reconnect_attempt == 0 {
+                        return;
+                    } else {
+                        continue;
+                    }
                 }
 
                 let mut connection = connection.unwrap();
