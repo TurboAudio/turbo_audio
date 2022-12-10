@@ -1,7 +1,7 @@
-use self::{tcp::TcpConnection, terminal::UsbConnection};
+use self::{tcp::TcpConnection, usb::UsbConnection};
 
 pub mod tcp;
-pub mod terminal;
+pub mod usb;
 
 pub enum Connection {
     Tcp(TcpConnection),

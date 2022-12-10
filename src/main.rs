@@ -12,7 +12,7 @@ use anyhow::Result;
 use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
-use connections::{tcp::TcpConnection, terminal::UsbConnection, Connection};
+use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
 use pipewire_listener::PipewireController;
 use resources::{
     color::Color,
