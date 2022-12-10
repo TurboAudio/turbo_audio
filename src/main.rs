@@ -36,7 +36,7 @@ fn test_base_relations() {
     let mut settings: HashMap<i32, Settings> = HashMap::default();
     let mut effects: HashMap<i32, Effect> = HashMap::default();
     let mut effect_settings: HashMap<i32, i32> = HashMap::default();
-    let mut ledstrips = vec![];
+    let mut ledstrips = Vec::default();
 
     let moody_settings = MoodySettings {
         color: Color { r: 255, g: 0, b: 0 },
@@ -56,28 +56,18 @@ fn test_base_relations() {
     effects.insert(20, Effect::Raindrop(raindrop));
     effect_settings.insert(20, 1);
 
-    let mut ls1 = LedStrip::new();
+    let mut ls1 = LedStrip::default();
     ls1.set_led_count(10);
     ls1.add_effect(20, 10);
     ledstrips.push(ls1);
 
     for _ in 0..10 {
         println!("{:?}", ledstrips.get(0).unwrap().colors);
-        tick(
-            &mut ledstrips,
-            &mut effects,
-            &mut settings,
-            &effect_settings,
-        );
+        tick(&mut ledstrips, &mut effects, &settings, &effect_settings);
     }
     println!("{:?}", ledstrips);
 
-    tick(
-        &mut ledstrips,
-        &mut effects,
-        &mut settings,
-        &effect_settings,
-    );
+    tick(&mut ledstrips, &mut effects, &settings, &effect_settings);
     println!("{:?}", ledstrips);
 
     if let Settings::Moody(ref mut color) = settings.get_mut(&0).unwrap() {
@@ -87,37 +77,22 @@ fn test_base_relations() {
             b: 255,
         }
     };
-    tick(
-        &mut ledstrips,
-        &mut effects,
-        &mut settings,
-        &effect_settings,
-    );
+    tick(&mut ledstrips, &mut effects, &settings, &effect_settings);
     println!("{:?}", ledstrips);
 
     ledstrips.get_mut(0).unwrap().set_led_count(3);
-    tick(
-        &mut ledstrips,
-        &mut effects,
-        &mut settings,
-        &effect_settings,
-    );
+    tick(&mut ledstrips, &mut effects, &settings, &effect_settings);
     println!("{:?}", ledstrips);
 
     ledstrips.get_mut(0).unwrap().set_led_count(10);
-    tick(
-        &mut ledstrips,
-        &mut effects,
-        &mut settings,
-        &effect_settings,
-    );
+    tick(&mut ledstrips, &mut effects, &settings, &effect_settings);
     println!("{:?}", ledstrips);
 }
 
 fn tick(
     ledstrips: &mut Vec<LedStrip>,
     effects: &mut HashMap<i32, Effect>,
-    settings: &mut HashMap<i32, Settings>,
+    settings: &HashMap<i32, Settings>,
     effect_settings: &HashMap<i32, i32>,
 ) {
     for strip in ledstrips {
@@ -132,7 +107,7 @@ fn tick(
             let setting_id = effect_settings
                 .get(effect_id)
                 .expect("Setting id not found");
-            let setting = settings.get_mut(setting_id);
+            let setting = settings.get(setting_id);
             match (effect, setting) {
                 (Effect::Moody(_moody), Some(Settings::Moody(settings))) => {
                     update_moody(leds, settings);
