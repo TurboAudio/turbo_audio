@@ -7,63 +7,75 @@ use std::{
 };
 
 pub struct TcpConnection {
-    pub data_queue: Option<Sender<Vec<u8>>>,
-    ip: std::net::SocketAddr,
-    connection_thread: Option<JoinHandle<()>>,
+    pub data_queue: Sender<Vec<u8>>,
+    connection_thread: JoinHandle<()>,
 }
 
 impl TcpConnection {
-    pub fn new(ip: std::net::SocketAddr) -> Option<TcpConnection> {
-        let mut connection = TcpConnection {
-            connection_thread: None,
-            data_queue: None,
-            ip,
-        };
-
-        const CONNECTION_ATTEMPS: i32 = 5;
-        for _ in 0..CONNECTION_ATTEMPS {
-            if connection.connect() {
-                return Some(connection);
-            }
+    pub fn new(ip: std::net::SocketAddr) -> TcpConnection {
+        let (tx, handle) = TcpConnection::start_connection_thread(ip);
+        TcpConnection {
+            data_queue: tx,
+            connection_thread: handle,
         }
-
-        None
     }
 
     pub fn join(self) {
-        if self.connection_thread.is_some() {
-            self.connection_thread
-                .unwrap()
-                .join()
-                .expect("Error when trying to join connection thread");
-        }
+        self.connection_thread
+            .join()
+            .expect("Error when trying to join connection thread");
     }
 
-    fn connect(&mut self) -> bool {
+    fn start_connection_thread(ip: std::net::SocketAddr) -> (Sender<Vec<u8>>, JoinHandle<()>) {
         let (tx, rx) = channel::<Vec<u8>>();
-        let connection = TcpStream::connect_timeout(&self.ip, Duration::from_secs(5));
-        if connection.is_err() {
-            return false;
-        }
-
         let connection_thread = thread::spawn(move || {
-            let mut connection = connection.unwrap();
-            if connection
-                .set_write_timeout(Some(Duration::from_millis(100)))
-                .is_err()
-            {
-                return;
-            }
+            const MAX_RECONNECTION_ATTEMPTS: i32 = 5;
+            for reconnect_attempt in 0..MAX_RECONNECTION_ATTEMPTS {
+                let connection = TcpConnection::attempt_connection(ip);
+                if connection.is_none() && reconnect_attempt == 0 {
+                    return;
+                }
 
-            while let Ok(data) = rx.recv() {
-                if connection.write_all(&data).is_err() {
+                let mut connection = connection.unwrap();
+                if connection
+                    .set_write_timeout(Some(Duration::from_millis(100)))
+                    .is_err()
+                {
+                    return;
+                }
+
+                let mut connection_failed = false;
+                while let Ok(data) = rx.recv() {
+                    if connection.write_all(&data).is_err() {
+                        connection_failed = true;
+                        break;
+                    }
+                }
+
+                if !connection_failed {
                     break;
                 }
             }
         });
 
-        self.data_queue = Some(tx);
-        self.connection_thread = Some(connection_thread);
-        true
+        (tx, connection_thread)
+    }
+
+    fn attempt_connection(ip: std::net::SocketAddr) -> Option<TcpStream> {
+        const MAX_CONNECTION_ATTEMPTS: i32 = 5;
+        let mut attempt_count = 0;
+        loop {
+            if attempt_count == MAX_CONNECTION_ATTEMPTS {
+                break None;
+            }
+
+            let stream = TcpStream::connect_timeout(&ip, Duration::from_secs(5));
+            if stream.is_err() {
+                attempt_count += 1;
+                continue;
+            }
+
+            break Some(stream.unwrap());
+        }
     }
 }

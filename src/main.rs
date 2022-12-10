@@ -62,7 +62,7 @@ fn test_and_run_loop() {
     effect_settings.insert(20, 1);
 
     let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 197), 1234));
-    let connection = TcpConnection::new(ip).unwrap();
+    let connection = TcpConnection::new(ip);
     let connection_id = 1;
     connections.insert(connection_id, Connection::Tcp(connection));
     connections.insert(2, Connection::Usb(UsbConnection {}));
@@ -103,13 +103,7 @@ fn send_to_connection(ledstrip: &mut LedStrip, connections: &mut HashMap<i32, Co
     match connection {
         Connection::Tcp(tcp_connection) => {
             // If send fails, connection is closed.
-            if tcp_connection
-                .data_queue
-                .as_ref()
-                .unwrap()
-                .send(data)
-                .is_err()
-            {
+            if tcp_connection.data_queue.send(data).is_err() {
                 let connection = connections.remove(&connection_id).unwrap();
                 ledstrip.connection_id = None;
                 if let Connection::Tcp(connection) = connection {
