@@ -38,7 +38,7 @@ fn test_and_run_loop() {
     let mut effects: HashMap<i32, Effect> = HashMap::default();
     let mut effect_settings: HashMap<i32, i32> = HashMap::default();
     let mut connections: HashMap<i32, Connection> = HashMap::default();
-    let mut ledstrips = vec![];
+    let mut ledstrips = Vec::default();
 
     let moody_settings = MoodySettings {
         color: Color { r: 255, g: 0, b: 0 },
@@ -67,7 +67,7 @@ fn test_and_run_loop() {
     connections.insert(connection_id, Connection::Tcp(connection));
     connections.insert(2, Connection::Usb(UsbConnection {}));
 
-    let mut ls1 = LedStrip::new();
+    let mut ls1 = LedStrip::default();
     ls1.set_led_count(300);
     ls1.add_effect(20, 300);
     ls1.connection_id = Some(connection_id);
@@ -78,7 +78,7 @@ fn test_and_run_loop() {
         tick(
             &mut ledstrips,
             &mut effects,
-            &mut settings,
+            &settings,
             &effect_settings,
             &mut connections,
         );
@@ -120,7 +120,7 @@ fn send_to_connection(ledstrip: &mut LedStrip, connections: &mut HashMap<i32, Co
 fn tick(
     ledstrips: &mut Vec<LedStrip>,
     effects: &mut HashMap<i32, Effect>,
-    settings: &mut HashMap<i32, Settings>,
+    settings: &HashMap<i32, Settings>,
     effect_settings: &HashMap<i32, i32>,
     connections: &mut HashMap<i32, Connection>,
 ) {
@@ -136,7 +136,7 @@ fn tick(
             let setting_id = effect_settings
                 .get(effect_id)
                 .expect("Setting id not found");
-            let setting = settings.get_mut(setting_id);
+            let setting = settings.get(setting_id);
             match (effect, setting) {
                 (Effect::Moody(_moody), Some(Settings::Moody(settings))) => {
                     update_moody(leds, settings);
