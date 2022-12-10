@@ -1,13 +1,18 @@
 mod audio;
 mod config_parser;
+mod connections;
 mod pipewire_listener;
 mod resources;
+use connections::tcp::TcpConnection;
 use resources::{
     color::Color,
     effects::{moody::update_moody, raindrop::update_raindrop},
     ledstrip::LedStrip,
 };
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    net::{Ipv4Addr, SocketAddrV4},
+};
 
 use anyhow::Result;
 use audio::start_audio_loop;
@@ -36,6 +41,7 @@ fn test_and_run_loop() {
     let mut settings: HashMap<i32, Settings> = HashMap::default();
     let mut effects: HashMap<i32, Effect> = HashMap::default();
     let mut effect_settings: HashMap<i32, i32> = HashMap::default();
+    let mut connections: HashMap<i32, TcpConnection> = HashMap::default();
     let mut ledstrips = vec![];
 
     let moody_settings = MoodySettings {
@@ -56,65 +62,26 @@ fn test_and_run_loop() {
     effects.insert(20, Effect::Raindrop(raindrop));
     effect_settings.insert(20, 1);
 
+    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 197), 1234));
+    let connection = TcpConnection::new(ip).unwrap();
+    let connection_id = 1;
+    connections.insert(connection_id, connection);
+
     let mut ls1 = LedStrip::new();
-    ls1.set_led_count(10);
-    ls1.add_effect(20, 10);
+    ls1.set_led_count(300);
+    ls1.add_effect(20, 300);
+    ls1.connection_id = Some(connection_id);
     ledstrips.push(ls1);
 
-    for _ in 0..10 {
-        println!("{:?}", ledstrips.get(0).unwrap().colors);
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(16));
         tick(
             &mut ledstrips,
             &mut effects,
             &mut settings,
             &effect_settings,
+            &mut connections,
         );
-    }
-    println!("{:?}", ledstrips);
-
-    tick(
-        &mut ledstrips,
-        &mut effects,
-        &mut settings,
-        &effect_settings,
-    );
-    println!("{:?}", ledstrips);
-
-    if let Settings::Moody(ref mut color) = settings.get_mut(&0).unwrap() {
-        color.color = Color {
-            r: 255,
-            g: 255,
-            b: 255,
-        }
-    };
-    tick(
-        &mut ledstrips,
-        &mut effects,
-        &mut settings,
-        &effect_settings,
-    );
-    println!("{:?}", ledstrips);
-
-    ledstrips.get_mut(0).unwrap().set_led_count(3);
-    tick(
-        &mut ledstrips,
-        &mut effects,
-        &mut settings,
-        &effect_settings,
-    );
-    println!("{:?}", ledstrips);
-
-    ledstrips.get_mut(0).unwrap().set_led_count(10);
-    tick(
-        &mut ledstrips,
-        &mut effects,
-        &mut settings,
-        &effect_settings,
-    );
-    println!("{:?}", ledstrips);
-
-    loop {
-        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
 
@@ -123,6 +90,7 @@ fn tick(
     effects: &mut HashMap<i32, Effect>,
     settings: &mut HashMap<i32, Settings>,
     effect_settings: &HashMap<i32, i32>,
+    connections: &mut HashMap<i32, TcpConnection>,
 ) {
     for strip in ledstrips {
         for (effect_id, interval) in &strip.effects {
@@ -145,6 +113,21 @@ fn tick(
                     update_raindrop(leds, settings, &mut raindrop.state);
                 }
                 _ => panic!("Effect doesn't match settings"),
+            }
+        }
+
+        if strip.connection_id.is_some() {
+            if let Some(connection) = connections.get_mut(&strip.connection_id.unwrap()) {
+                let data: Vec<u8> = strip
+                    .colors
+                    .iter()
+                    .flat_map(|color| color.to_bytes())
+                    .collect();
+                if connection.data_queue.as_ref().unwrap().send(data).is_err() {
+                    let connection = connections.remove(&strip.connection_id.unwrap()).unwrap();
+                    strip.connection_id = None;
+                    connection.join()
+                }
             }
         }
     }

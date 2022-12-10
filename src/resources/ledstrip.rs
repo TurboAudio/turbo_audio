@@ -7,6 +7,7 @@ pub struct LedStrip {
     pub size: usize,
     pub colors: Vec<Color>,
     pub effects: Vec<(i32, EffectInterval)>,
+    pub connection_id: Option<i32>,
     used_led_count: usize,
 }
 
@@ -17,6 +18,7 @@ impl LedStrip {
             colors: vec![],
             effects: vec![],
             used_led_count: 0,
+            connection_id: None,
         }
     }
 
