@@ -30,10 +30,7 @@ impl LedStrip {
             return false;
         }
 
-        let interval = (
-            self.used_led_count,
-            self.used_led_count + size - 1,
-        );
+        let interval = (self.used_led_count, self.used_led_count + size - 1);
         self.effects.push((effect_id, interval));
         self.used_led_count += size;
         true
