@@ -1,4 +1,4 @@
-use std::ops::{Mul, Div};
+use std::ops::{Div, Mul};
 
 use crate::resources::color::Color;
 use rand::Rng;
@@ -67,11 +67,27 @@ pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &
     for _ in 0..settings.rain_speed {
         let new_position = rand::thread_rng().gen_range(0..color_size);
         let next_color = match rand::thread_rng().gen_range(0..4) {
-            0 => Color {r: 255, g: 0, b: 255},
-            1 => Color {r: 255, g: 255, b: 0},
-            2 => Color {r: 0, g: 255, b: 255},
-            3 => Color {r: 255, g: 255, b: 255},
-            _ => unreachable!()
+            0 => Color {
+                r: 255,
+                g: 0,
+                b: 255,
+            },
+            1 => Color {
+                r: 255,
+                g: 255,
+                b: 0,
+            },
+            2 => Color {
+                r: 0,
+                g: 255,
+                b: 255,
+            },
+            3 => Color {
+                r: 255,
+                g: 255,
+                b: 255,
+            },
+            _ => unreachable!(),
         };
         next_riples.push((new_position, next_color, RipleDirection::Left));
         next_riples.push((new_position, next_color, RipleDirection::Right));
