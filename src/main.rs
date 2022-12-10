@@ -43,7 +43,7 @@ fn test_and_run_loop() {
     let moody_settings = MoodySettings {
         color: Color { r: 255, g: 0, b: 0 },
     };
-    let raindrop_settings = RaindropSettings { rain_speed: 1 };
+    let raindrop_settings = RaindropSettings { rain_speed: 1, drop_rate: 0.10 };
     settings.insert(0, Settings::Moody(moody_settings));
     settings.insert(1, Settings::Raindrop(raindrop_settings));
 
