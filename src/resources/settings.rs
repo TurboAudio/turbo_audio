@@ -4,4 +4,3 @@ pub enum Settings {
     Moody(MoodySettings),
     Raindrop(RaindropSettings),
 }
-

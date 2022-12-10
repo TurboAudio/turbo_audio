@@ -3,19 +3,27 @@ mod config_parser;
 mod connections;
 mod pipewire_listener;
 mod resources;
-use std::{collections::HashMap, net::{SocketAddrV4, Ipv4Addr}};
-
-use connections::{tcp::TcpConnection, Connection, terminal::UsbConnection};
-use resources::{
-    color::Color,
-    effects::{moody::{update_moody, MoodySettings, Moody}, raindrop::{update_raindrop, RaindropSettings, Raindrops, RaindropState}, Effect},
-    ledstrip::LedStrip, settings::Settings,
+use std::{
+    collections::HashMap,
+    net::{Ipv4Addr, SocketAddrV4},
 };
+
 use anyhow::Result;
 use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
+use connections::{tcp::TcpConnection, terminal::UsbConnection, Connection};
 use pipewire_listener::PipewireController;
+use resources::{
+    color::Color,
+    effects::{
+        moody::{update_moody, Moody, MoodySettings},
+        raindrop::{update_raindrop, RaindropSettings, RaindropState, Raindrops},
+        Effect,
+    },
+    ledstrip::LedStrip,
+    settings::Settings,
+};
 
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
@@ -54,7 +62,7 @@ fn test_and_run_loop() {
     let connection = TcpConnection::new(ip).unwrap();
     let connection_id = 1;
     connections.insert(connection_id, Connection::Tcp(connection));
-    connections.insert(2, Connection::Usb(UsbConnection{}));
+    connections.insert(2, Connection::Usb(UsbConnection {}));
 
     let mut ls1 = LedStrip::new();
     ls1.set_led_count(300);

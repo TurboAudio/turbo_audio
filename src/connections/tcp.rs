@@ -1,4 +1,10 @@
-use std::{thread::{JoinHandle, self}, sync::mpsc::{Sender, channel}, net::TcpStream, time::Duration, io::Write};
+use std::{
+    io::Write,
+    net::TcpStream,
+    sync::mpsc::{channel, Sender},
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 pub struct TcpConnection {
     pub data_queue: Option<Sender<Vec<u8>>>,
@@ -8,7 +14,11 @@ pub struct TcpConnection {
 
 impl TcpConnection {
     pub fn new(ip: std::net::SocketAddr) -> Option<TcpConnection> {
-        let mut connection = TcpConnection { connection_thread: None, data_queue: None, ip};
+        let mut connection = TcpConnection {
+            connection_thread: None,
+            data_queue: None,
+            ip,
+        };
 
         const CONNECTION_ATTEMPS: i32 = 5;
         for _ in 0..CONNECTION_ATTEMPS {
@@ -22,7 +32,10 @@ impl TcpConnection {
 
     pub fn join(self) {
         if self.connection_thread.is_some() {
-            self.connection_thread.unwrap().join().expect("Error when trying to join connection thread");
+            self.connection_thread
+                .unwrap()
+                .join()
+                .expect("Error when trying to join connection thread");
         }
     }
 
@@ -35,7 +48,10 @@ impl TcpConnection {
 
         let connection_thread = thread::spawn(move || {
             let mut connection = connection.unwrap();
-            if connection.set_write_timeout(Some(Duration::from_millis(100))).is_err() {
+            if connection
+                .set_write_timeout(Some(Duration::from_millis(100)))
+                .is_err()
+            {
                 return;
             }
 
@@ -51,4 +67,3 @@ impl TcpConnection {
         true
     }
 }
-
