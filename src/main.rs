@@ -3,14 +3,14 @@ mod config_parser;
 mod connections;
 mod pipewire_listener;
 mod resources;
-use std::{
-    collections::HashMap,
-    net::{Ipv4Addr, SocketAddrV4},
-};
 use resources::{
     color::Color,
     effects::{moody::update_moody, raindrop::update_raindrop},
     ledstrip::LedStrip,
+};
+use std::{
+    collections::HashMap,
+    net::{Ipv4Addr, SocketAddrV4},
 };
 
 use anyhow::Result;

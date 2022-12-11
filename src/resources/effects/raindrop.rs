@@ -1,6 +1,6 @@
-use std::ops::{Div, Mul};
 use crate::resources::color::Color;
 use rand::Rng;
+use std::ops::{Div, Mul};
 
 #[derive(Clone, Copy)]
 pub struct RaindropSettings {
