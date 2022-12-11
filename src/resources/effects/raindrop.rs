@@ -1,5 +1,4 @@
 use std::ops::{Div, Mul};
-
 use crate::resources::color::Color;
 use rand::Rng;
 
@@ -89,6 +88,7 @@ pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &
             },
             _ => unreachable!(),
         };
+        *leds.get_mut(new_position).expect("Rng lib failed.") = next_color;
         next_riples.push((new_position, next_color, RipleDirection::Left));
         next_riples.push((new_position, next_color, RipleDirection::Right));
     }

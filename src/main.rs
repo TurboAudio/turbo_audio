@@ -7,6 +7,11 @@ use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddrV4},
 };
+use resources::{
+    color::Color,
+    effects::{moody::update_moody, raindrop::update_raindrop},
+    ledstrip::LedStrip,
+};
 
 use anyhow::Result;
 use audio::start_audio_loop;
@@ -14,14 +19,13 @@ use clap::Parser;
 use config_parser::TurboAudioConfig;
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
 use pipewire_listener::PipewireController;
-use resources::{
-    color::Color,
+
+use crate::resources::{
     effects::{
-        moody::{update_moody, Moody, MoodySettings},
-        raindrop::{update_raindrop, RaindropSettings, RaindropState, Raindrops},
+        moody::{Moody, MoodySettings},
+        raindrop::{RaindropSettings, RaindropState, Raindrops},
         Effect,
     },
-    ledstrip::LedStrip,
     settings::Settings,
 };
 
