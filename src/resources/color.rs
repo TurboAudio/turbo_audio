@@ -1,13 +1,14 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct Color {
     pub r: u8,
     pub g: u8,
     pub b: u8,
 }
 
+pub const BLACK: Color = Color { r: 0, g: 0, b: 0 };
 impl Color {
     pub fn new() -> Color {
-        Color { r: 0, g: 0, b: 0 }
+        BLACK
     }
 
     pub fn add(&mut self, rhs: &Color) {

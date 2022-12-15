@@ -1,4 +1,4 @@
-use crate::resources::color::Color;
+use crate::resources::color::{Color, BLACK};
 use rand::Rng;
 
 #[derive(Clone, Copy)]
@@ -22,10 +22,7 @@ pub struct RaindropState {
 }
 
 pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &mut RaindropState) {
-    for led in leds.iter_mut() {
-        *led = Color::new();
-    }
-
+    leds.fill(BLACK);
     let color_size = leds.len();
     let mut next_riples: Vec<(usize, Color, RipleDirection)> = vec![];
     const SHIFT: usize = 1;
