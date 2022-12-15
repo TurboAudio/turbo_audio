@@ -13,7 +13,7 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Ok, Result};
 use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
@@ -78,67 +78,32 @@ fn test_and_run_loop() {
     ledstrips.push(ls1);
 
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(16));
-        tick(
-            &mut ledstrips,
-            &mut effects,
-            &settings,
-            &effect_settings,
-            &mut connections,
-        );
+        let tick_start = std::time::Instant::now();
+        let _update_result = update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
+        let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
+        let sleep_duration = tick_start.elapsed();
+        std::thread::sleep(std::time::Duration::from_millis(16) - sleep_duration);
     }
 }
 
-fn send_to_connection(
-    ledstrip: &mut LedStrip,
-    connection_id: i32,
-    connections: &mut HashMap<i32, Connection>,
-) -> anyhow::Result<()> {
-    let connection = connections
-        .get_mut(&connection_id)
-        .ok_or_else(|| anyhow!("Connection id {} doesn't exist", connection_id))?;
-
-    let data = ledstrip
-        .colors
-        .iter()
-        .flat_map(|color| color.to_bytes())
-        .collect::<Vec<_>>();
-    match connection {
-        Connection::Tcp(tcp_connection) => {
-            // If send fails, connection is closed.
-            if let Err(error) = tcp_connection.data_queue.send(data) {
-                eprintln!("{:?}", error);
-                connections.remove(&connection_id);
-                ledstrip.connection_id = None;
-            };
-            Ok(())
-        }
-        Connection::Usb(_terminal) => {
-            todo!("Implement Usb connection");
-        }
-    }
-}
-
-// TODO: Split into 2 functions. (update_effects, send_colors)
-fn tick(
-    ledstrips: &mut Vec<LedStrip>,
+fn update_ledstrips(
+    ledstrips: &mut [LedStrip],
     effects: &mut HashMap<i32, Effect>,
-    settings: &HashMap<i32, Settings>,
     effect_settings: &HashMap<i32, i32>,
-    connections: &mut HashMap<i32, Connection>,
-) {
+    settings: &HashMap<i32, Settings>,
+) -> anyhow::Result<()> {
     for ledstrip in ledstrips {
         for (effect_id, interval) in &ledstrip.effects {
             let leds = ledstrip
                 .colors
                 .get_mut(interval.0..=interval.1)
-                .expect("Ledstrip interval out of bounds");
+                .ok_or_else(|| anyhow!("Ledstrip interval out of bounds"))?;
             let effect = effects
                 .get_mut(effect_id)
-                .expect("Effect id was not found.");
+                .ok_or_else(|| anyhow!("Effect id was not found."))?;
             let setting_id = effect_settings
                 .get(effect_id)
-                .expect("Setting id not found");
+                .ok_or_else(|| anyhow!("Setting id not found"))?;
             let setting = settings.get(setting_id);
             match (effect, setting) {
                 (Effect::Moody(_moody), Some(Settings::Moody(settings))) => {
@@ -150,13 +115,42 @@ fn tick(
                 _ => panic!("Effect doesn't match settings"),
             }
         }
+    }
+    Ok(())
+}
 
+fn send_ledstrip_colors(
+    ledstrips: &mut Vec<LedStrip>,
+    connections: &mut HashMap<i32, Connection>,
+) -> anyhow::Result<()> {
+    for ledstrip in ledstrips {
         if let Some(connection_id) = ledstrip.connection_id {
-            if let Err(e) = send_to_connection(ledstrip, connection_id, connections) {
-                eprintln!("{:?}", e);
+            let connection = connections
+                .get_mut(&connection_id)
+                .ok_or_else(|| anyhow!("Connection id \"{}\" doesn't exist", connection_id))?;
+
+            let data = ledstrip
+                .colors
+                .iter()
+                .flat_map(|color| color.to_bytes())
+                .collect::<Vec<_>>();
+            match connection {
+                Connection::Tcp(tcp_connection) => {
+                    // If send fails, connection is closed.
+                    if let Err(error) = tcp_connection.data_queue.send(data) {
+                        eprintln!("{:?}", error);
+                        connections.remove(&connection_id);
+                        ledstrip.connection_id = None;
+                    };
+                    return Ok(());
+                }
+                Connection::Usb(_terminal) => {
+                    todo!("Implement Usb connection");
+                }
             }
         }
     }
+    Ok(())
 }
 
 fn main() -> Result<()> {
