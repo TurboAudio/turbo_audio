@@ -2,11 +2,12 @@ use std::collections::HashSet;
 
 use super::color::Color;
 pub type EffectInterval = (usize, usize);
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct LedStrip {
     pub size: usize,
     pub colors: Vec<Color>,
     pub effects: Vec<(i32, EffectInterval)>,
+    pub connection_id: Option<i32>,
     used_led_count: usize,
 }
 

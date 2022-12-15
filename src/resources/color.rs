@@ -15,4 +15,8 @@ impl Color {
         self.g = self.g.saturating_add(rhs.g);
         self.b = self.b.saturating_add(rhs.b);
     }
+
+    pub fn to_bytes(self) -> Vec<u8> {
+        vec![self.r, self.g, self.b]
+    }
 }
