@@ -1,10 +1,11 @@
 use crate::resources::color::Color;
 
+#[derive(Debug)]
 pub struct Moody {
     pub id: i32,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct MoodySettings {
     pub color: Color,
 }
