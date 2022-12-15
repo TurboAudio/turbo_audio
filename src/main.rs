@@ -65,7 +65,7 @@ fn test_and_run_loop() {
     effects.insert(20, Effect::Raindrop(raindrop));
     effect_settings.insert(20, 1);
 
-    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 197), 1234));
+    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 200), 1234));
     let connection = TcpConnection::new(ip);
     let connection_id = 1;
     connections.insert(connection_id, Connection::Tcp(connection));
@@ -108,11 +108,8 @@ fn send_to_connection(ledstrip: &mut LedStrip, connections: &mut HashMap<i32, Co
         Connection::Tcp(tcp_connection) => {
             // If send fails, connection is closed.
             if tcp_connection.data_queue.send(data).is_err() {
-                let connection = connections.remove(&connection_id).unwrap();
+                let _ = connections.remove(&connection_id).unwrap();
                 ledstrip.connection_id = None;
-                if let Connection::Tcp(connection) = connection {
-                    connection.join();
-                }
             }
         }
         Connection::Usb(_terminal) => {
