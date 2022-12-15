@@ -1,6 +1,5 @@
 use crate::resources::color::Color;
 use rand::Rng;
-use std::ops::{Div, Mul};
 
 #[derive(Clone, Copy)]
 pub struct RaindropSettings {
@@ -48,9 +47,9 @@ pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &
         const NUMERATOR: u8 = 3;
         const DENOMINATOR: u8 = 4;
         let next_color = Color {
-            r: color.r.div(DENOMINATOR).mul(NUMERATOR),
-            g: color.g.div(DENOMINATOR).mul(NUMERATOR),
-            b: color.b.div(DENOMINATOR).mul(NUMERATOR),
+            r: color.r / DENOMINATOR * NUMERATOR,
+            g: color.g / DENOMINATOR * NUMERATOR,
+            b: color.b / DENOMINATOR * NUMERATOR,
         };
         if let Some(led) = leds.get_mut(next_position) {
             led.add(&next_color);
