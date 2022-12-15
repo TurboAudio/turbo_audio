@@ -14,11 +14,11 @@ pub struct TcpConnection {
 }
 
 impl TcpConnection {
-    pub fn new(ip: std::net::SocketAddr) -> TcpConnection {
+    pub fn new(ip: std::net::SocketAddr) -> Self {
         let (tx, handle) = TcpConnection::start_connection_thread(ip);
-        TcpConnection {
+        Self {
             data_queue: tx,
-            connection_thread: Some(handle),
+            connection_thread: handle.into(),
         }
     }
 
@@ -32,9 +32,7 @@ impl TcpConnection {
         let (tx, mut rx) = ring_channel::<Vec<u8>>(buffer_size);
         let connection_thread = thread::spawn(move || -> Result<(), anyhow::Error> {
             loop {
-                let mut connection = TcpConnection::attempt_connection(ip, None, None)
-                    .ok_or_else(|| anyhow!("Connection failed"))?;
-                connection.set_write_timeout(Some(Duration::from_millis(100)))?;
+                let mut connection = TcpConnection::attempt_connection(ip, None, None)?;
 
                 loop {
                     match rx.recv() {
@@ -57,18 +55,22 @@ impl TcpConnection {
         ip: std::net::SocketAddr,
         max_connection_attempts: Option<i32>,
         connection_timeout: Option<Duration>,
-    ) -> Option<TcpStream> {
+    ) -> anyhow::Result<TcpStream> {
         let max_connection_attempts = max_connection_attempts.unwrap_or(20);
         let connection_timeout = connection_timeout.unwrap_or(Duration::from_secs(3));
         for _ in 0..max_connection_attempts {
             let stream = TcpStream::connect_timeout(&ip, connection_timeout);
-            if stream.is_err() {
-                continue;
+            match stream {
+                Ok(stream) => {
+                    stream
+                        .set_write_timeout(Some(Duration::from_millis(100)))
+                        .map_err(|_| anyhow!("Unable to set write timeout on {:?}", ip))?;
+                    return Ok(stream);
+                }
+                Err(_) => continue,
             }
-
-            return Some(stream.unwrap());
         }
-        None
+        Err(anyhow!("Unable to connect to {:?}", ip))
     }
 }
 
@@ -78,7 +80,7 @@ impl Drop for TcpConnection {
             if let Err(e) = connection.join() {
                 eprintln!("Error in connection thread {:?}", e);
             }
-            println!("Conn thread joined.");
+            println!("Connection thread joined.");
         }
     }
 }

@@ -13,7 +13,7 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
 };
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
@@ -89,28 +89,29 @@ fn test_and_run_loop() {
     }
 }
 
-fn send_to_connection(ledstrip: &mut LedStrip, connections: &mut HashMap<i32, Connection>) {
-    if ledstrip.connection_id.is_none() {
-        return;
-    }
-
-    let connection_id = ledstrip.connection_id.unwrap();
+fn send_to_connection(
+    ledstrip: &mut LedStrip,
+    connection_id: i32,
+    connections: &mut HashMap<i32, Connection>,
+) -> anyhow::Result<()> {
     let connection = connections
         .get_mut(&connection_id)
-        .expect("Failed to find connection");
+        .ok_or_else(|| anyhow!("Connection id {} doesn't exist", connection_id))?;
 
-    let data: Vec<u8> = ledstrip
+    let data = ledstrip
         .colors
         .iter()
         .flat_map(|color| color.to_bytes())
-        .collect();
+        .collect::<Vec<_>>();
     match connection {
         Connection::Tcp(tcp_connection) => {
             // If send fails, connection is closed.
-            if tcp_connection.data_queue.send(data).is_err() {
-                let _ = connections.remove(&connection_id).unwrap();
+            if let Err(error) = tcp_connection.data_queue.send(data) {
+                eprintln!("{:?}", error);
+                connections.remove(&connection_id);
                 ledstrip.connection_id = None;
-            }
+            };
+            Ok(())
         }
         Connection::Usb(_terminal) => {
             todo!("Implement Usb connection");
@@ -118,6 +119,7 @@ fn send_to_connection(ledstrip: &mut LedStrip, connections: &mut HashMap<i32, Co
     }
 }
 
+// TODO: Split into 2 functions. (update_effects, send_colors)
 fn tick(
     ledstrips: &mut Vec<LedStrip>,
     effects: &mut HashMap<i32, Effect>,
@@ -148,7 +150,12 @@ fn tick(
                 _ => panic!("Effect doesn't match settings"),
             }
         }
-        send_to_connection(ledstrip, connections);
+
+        if let Some(connection_id) = ledstrip.connection_id {
+            if let Err(e) = send_to_connection(ledstrip, connection_id, connections) {
+                eprintln!("{:?}", e);
+            }
+        }
     }
 }
 
