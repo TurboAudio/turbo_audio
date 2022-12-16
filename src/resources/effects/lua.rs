@@ -40,7 +40,7 @@ pub struct LuaEffectSettings {
 impl LuaEffect {
     pub fn new(filename: &str) -> Result<Self, LuaEffectLoadError> {
         let (lua, json_schema, compiled_json_schema) = Self::get_lua_effect(filename)?;
-        Ok(LuaEffect {
+        Ok(Self {
             lua,
             json_schema,
             compiled_json_schema,
