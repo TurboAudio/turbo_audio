@@ -55,7 +55,7 @@ fn test_and_run_loop() {
     let lua_settings = LuaEffectSettings {
         settings: serde_json::json!({
             "enable_beep_boops": true,
-            "intensity": 5,
+            "intensity": 11,
         }),
     };
     settings.insert(0, Settings::Moody(moody_settings));

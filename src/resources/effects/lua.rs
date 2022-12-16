@@ -30,7 +30,6 @@ pub struct LuaEffect {
     lua: Lua,
     json_schema: String,
     compiled_json_schema: JSONSchema,
-    lua_leds_buffer: Vec<Color>,
 }
 
 #[derive(Clone, Debug)]
@@ -45,7 +44,6 @@ impl LuaEffect {
             lua,
             json_schema,
             compiled_json_schema,
-            lua_leds_buffer: vec![],
         })
     }
 
@@ -59,60 +57,57 @@ impl LuaEffect {
             .set("settings", self.lua.to_value(&settings.settings).unwrap())
             .map_err(LuaEffectRuntimeError::Lua)?;
 
-        let resize_fn: Function = match self.lua.globals().get("Resize_Colors") {
-            Ok(resize_fn) => Ok(resize_fn),
-            Err(_) => Err(LuaEffectRuntimeError::MissingFrameworkImport),
-        }?;
+        let resize_fn: Function = self
+            .lua
+            .globals()
+            .get("Resize_Colors")
+            .map_err(|_| LuaEffectRuntimeError::MissingFrameworkImport)?;
+
         resize_fn
             .call::<_, Value>(leds.len())
             .map_err(LuaEffectRuntimeError::Lua)?;
 
-        let tick_fn: Function = match self.lua.globals().get("Tick") {
-            Ok(tick_fn) => Ok(tick_fn),
-            Err(_) => Err(LuaEffectRuntimeError::MissingTickFunction),
-        }?;
+        let tick_fn: Function = self
+            .lua
+            .globals()
+            .get("Tick")
+            .map_err(|_| LuaEffectRuntimeError::MissingTickFunction)?;
 
         tick_fn
             .call::<_, ()>(())
             .map_err(LuaEffectRuntimeError::Lua)?;
 
-        let set_colors_fn: Function = match self.lua.globals().get("Set_colors") {
-            Ok(set_colors_fn) => Ok(set_colors_fn),
-            Err(_) => Err(LuaEffectRuntimeError::MissingFrameworkImport),
-        }?;
+        let set_colors_fn: Function = self
+            .lua
+            .globals()
+            .get("Set_colors")
+            .map_err(|_| LuaEffectRuntimeError::MissingFrameworkImport)?;
 
         set_colors_fn
             .call::<_, ()>(())
             .map_err(LuaEffectRuntimeError::Lua)?;
 
-        let data: mlua::String = self
+        let data = self
             .lua
             .globals()
-            .get("Colors_bin")
+            .get::<_, mlua::String>("Colors_bin")
             .map_err(LuaEffectRuntimeError::Lua)?;
         let data = data.as_bytes();
-        if self.lua_leds_buffer.len() != leds.len() {
-            self.lua_leds_buffer.resize(leds.len(), Color::default());
-        }
+
         if leds.len() * 3 != data.len() {
             return Err(LuaEffectRuntimeError::WrongColorsLen);
         }
-        let dst = self.lua_leds_buffer.as_mut_ptr() as *mut u8;
-        let src = data.as_ptr();
-        // SAFETY: This code is safe and sound because what we are copying to is the `Color` struct
-        // which has a C layout because of the #[repr(C)] directive.
-        // Also, the memcopy here is garanteed to not create a buffer overflow because of the
-        // bounds check earlier, and the memory will never be overlapping since we point to
-        // different variables, have no overflow, and those variable have differents adresses in
-        // memory. This code will remain safe as long as the `Color` struct's layout does not
-        // change.
-        // The usage of safety here is justified by the amount of performance gained when copying
-        // data from our Lua script (~4X overall speed increase) without the need to go through
-        // complicated seralization.
-        unsafe {
-            std::ptr::copy_nonoverlapping(src, dst, data.len());
-        }
-        leds.copy_from_slice(self.lua_leds_buffer.as_slice());
+                
+        leds.copy_from_slice(
+            &data
+                .chunks_exact(3)
+                .map(|s| Color {
+                    r: s[0],
+                    g: s[1],
+                    b: s[2],
+                })
+                .collect::<Vec<_>>(),
+        );
 
         Ok(())
     }
@@ -122,12 +117,8 @@ impl LuaEffect {
         let lua = Lua::new();
         lua.load(&lua_src).exec().map_err(LuaEffectLoadError::Lua)?;
         let schema = Self::get_lua_schema(&lua)?;
-        let compiled_schema = match JSONSchema::compile(&schema) {
-            Ok(value) => Ok(value),
-            Err(_) => Err(LuaEffectLoadError::Effect(
-                InvalidEffectError::InvalidSchema,
-            )),
-        }?;
+        let compiled_schema = JSONSchema::compile(&schema)
+            .map_err(|_| LuaEffectLoadError::Effect(InvalidEffectError::InvalidSchema))?;
 
         Ok((lua, schema.to_string(), compiled_schema))
     }
