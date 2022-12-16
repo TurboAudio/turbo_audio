@@ -1,12 +1,14 @@
 Colors = {}
 
 function Set_colors()
-	local data = ""
-	for _, value in pairs(Colors) do
-		local rgb_triplet_binary = string.char(value.r) .. string.char(value.g) .. string.char(value.b)
-		data = data .. rgb_triplet_binary
+	local data = {}
+	for i, value in pairs(Colors) do
+		local index = ((i - 1) * 3)
+		data[index + 1] = string.char(value.r)
+		data[index + 2] = string.char(value.g)
+		data[index + 3] = string.char(value.b)
 	end
-	Colors_bin = data
+	Colors_bin = table.concat(data)
 end
 
 function Resize_Colors(len)
