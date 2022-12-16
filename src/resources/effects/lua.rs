@@ -97,7 +97,7 @@ impl LuaEffect {
         if leds.len() * 3 != data.len() {
             return Err(LuaEffectRuntimeError::WrongColorsLen);
         }
-                
+
         leds.copy_from_slice(
             &data
                 .chunks_exact(3)
