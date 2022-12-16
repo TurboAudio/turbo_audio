@@ -97,13 +97,18 @@ impl LuaEffect {
         if leds.len() * 3 != data.len() {
             return Err(LuaEffectRuntimeError::WrongColorsLen);
         }
-        // This takes way too long
-        // data.windows(3).step_by(3).zip(result.iter_mut()).for_each(|(src, dst)| {
-        //     let src: [u8; 3] = src.try_into().unwrap();
-        //     *dst = Color{r: src[0], g: src[1], b: src[2]};
-        // });
         let dst = self.lua_leds_buffer.as_mut_ptr() as *mut u8;
         let src = data.as_ptr();
+        // SAFETY: This code is safe and sound because what we are copying to is the `Color` struct
+        // which has a C layout because of the #[repr(C)] directive.
+        // Also, the memcopy here is garanteed to not create a buffer overflow because of the
+        // bounds check earlier, and the memory will never be overlapping since we point to
+        // different variables, have no overflow, and those variable have differents adresses in
+        // memory. This code will remain safe as long as the `Color` struct's layout does not
+        // change.
+        // The usage of safety here is justified by the amount of performance gained when copying
+        // data from our Lua script (~4X overall speed increase) without the need to go through
+        // complicated seralization.
         unsafe {
             std::ptr::copy_nonoverlapping(src, dst, data.len());
         }
