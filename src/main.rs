@@ -10,7 +10,7 @@ use resources::{
 };
 use std::{
     collections::HashMap,
-    net::{Ipv4Addr, SocketAddrV4},
+    net::{Ipv4Addr, SocketAddrV4}, time::Duration, ops::Add,
 };
 
 use anyhow::{anyhow, Ok, Result};
@@ -95,12 +95,21 @@ fn test_and_run_loop() {
     ls1.connection_id = Some(connection_id);
     ledstrips.push(ls1);
 
+    // TODO: Use counters to remove Duration conversions
+    let mut lag = chrono::Duration::zero();
+    let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
+    let mut last_loop_start = std::time::Instant::now();
     loop {
-        let tick_start = std::time::Instant::now();
+        let time = std::time::Instant::now();
+        lag = lag.checked_add(&chrono::Duration::from_std(last_loop_start.elapsed()).unwrap()).unwrap();
+        last_loop_start = std::time::Instant::now();
+        let current_sleep_duration = std::cmp::max(chrono::Duration::zero(), duration_per_tick.checked_sub(&lag).unwrap());
+        std::thread::sleep(current_sleep_duration.to_std().unwrap());
+
         let _update_result = update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
-        let sleep_duration = tick_start.elapsed();
-        std::thread::sleep(std::time::Duration::from_millis(16) - sleep_duration);
+
+        lag = lag.checked_sub(&duration_per_tick).unwrap();
     }
 }
 
