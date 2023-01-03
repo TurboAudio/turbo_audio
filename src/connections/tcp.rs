@@ -9,7 +9,7 @@ use std::{
 };
 
 pub struct TcpConnection {
-    pub data_queue: ring_channel::RingSender<Vec<u8>>,
+    data_queue: ring_channel::RingSender<Vec<u8>>,
     connection_thread: Option<JoinHandle<anyhow::Result<()>>>,
 }
 
@@ -20,6 +20,10 @@ impl TcpConnection {
             data_queue: tx,
             connection_thread: handle.into(),
         }
+    }
+
+    pub fn send_data(&mut self, packet: Vec<u8>) -> Result<Option<Vec<u8>>, SendError<Vec<u8>>> {
+        self.data_queue.send(packet)
     }
 
     fn start_connection_thread(

@@ -150,7 +150,7 @@ fn send_ledstrip_colors(
             match connection {
                 Connection::Tcp(tcp_connection) => {
                     // If send fails, connection is closed.
-                    if let Err(error) = tcp_connection.data_queue.send(data) {
+                    if let Err(error) = tcp_connection.send_data(data) {
                         eprintln!("{:?}", error);
                         connections.remove(&connection_id);
                         ledstrip.connection_id = None;
