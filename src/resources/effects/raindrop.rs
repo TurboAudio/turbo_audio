@@ -38,7 +38,7 @@ pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &
                 if current_position + SHIFT >= color_size {
                     continue;
                 }
-                (current_position + SHIFT) as usize
+                current_position + SHIFT
             }
         };
         const NUMERATOR: u8 = 3;
