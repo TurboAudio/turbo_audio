@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use ring_channel::*;
 use std::{
     io::Write,
@@ -10,7 +9,12 @@ use std::{
 
 pub struct TcpConnection {
     data_queue: ring_channel::RingSender<Vec<u8>>,
-    connection_thread: Option<JoinHandle<anyhow::Result<()>>>,
+    connection_thread: Option<JoinHandle<Result<(), TcpConnectionError>>>,
+}
+
+enum TcpConnectionError {
+    ConnectionFailed(std::net::SocketAddr),
+    ConnectionConfigurationFailed(std::io::Error),
 }
 
 impl TcpConnection {
@@ -30,14 +34,13 @@ impl TcpConnection {
         ip: std::net::SocketAddr,
     ) -> (
         ring_channel::RingSender<Vec<u8>>,
-        JoinHandle<anyhow::Result<()>>,
+        JoinHandle<Result<(), TcpConnectionError>>,
     ) {
         let buffer_size: NonZeroUsize = NonZeroUsize::new(64).unwrap();
         let (tx, mut rx) = ring_channel::<Vec<u8>>(buffer_size);
-        let connection_thread = thread::spawn(move || -> Result<(), anyhow::Error> {
+        let connection_thread = thread::spawn(move || -> Result<(), TcpConnectionError> {
             loop {
                 let mut connection = TcpConnection::attempt_connection(ip, None, None)?;
-
                 loop {
                     match rx.recv() {
                         Ok(data) => {
@@ -59,7 +62,7 @@ impl TcpConnection {
         ip: std::net::SocketAddr,
         max_connection_attempts: Option<i32>,
         connection_timeout: Option<Duration>,
-    ) -> anyhow::Result<TcpStream> {
+    ) -> Result<TcpStream, TcpConnectionError> {
         let max_connection_attempts = max_connection_attempts.unwrap_or(20);
         let connection_timeout = connection_timeout.unwrap_or(Duration::from_secs(3));
         for _ in 0..max_connection_attempts {
@@ -68,13 +71,13 @@ impl TcpConnection {
                 Ok(stream) => {
                     stream
                         .set_write_timeout(Some(Duration::from_millis(100)))
-                        .map_err(|_| anyhow!("Unable to set write timeout on {:?}", ip))?;
+                        .map_err(TcpConnectionError::ConnectionConfigurationFailed)?;
                     return Ok(stream);
                 }
                 Err(_) => continue,
             }
         }
-        Err(anyhow!("Unable to connect to {:?}", ip))
+        Err(TcpConnectionError::ConnectionFailed(ip))
     }
 }
 
