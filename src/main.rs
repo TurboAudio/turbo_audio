@@ -99,12 +99,18 @@ fn test_and_run_loop() {
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
     let mut last_loop_start = std::time::Instant::now();
     loop {
-        lag = lag.checked_add(&chrono::Duration::from_std(last_loop_start.elapsed()).unwrap()).unwrap();
+        lag = lag
+            .checked_add(&chrono::Duration::from_std(last_loop_start.elapsed()).unwrap())
+            .unwrap();
         last_loop_start = std::time::Instant::now();
-        let current_sleep_duration = std::cmp::max(chrono::Duration::zero(), duration_per_tick.checked_sub(&lag).unwrap());
+        let current_sleep_duration = std::cmp::max(
+            chrono::Duration::zero(),
+            duration_per_tick.checked_sub(&lag).unwrap(),
+        );
         std::thread::sleep(current_sleep_duration.to_std().unwrap());
 
-        let _update_result = update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
+        let _update_result =
+            update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
