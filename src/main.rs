@@ -77,12 +77,10 @@ fn test_and_run_loop() {
     ls1.connection_id = Some(connection_id);
     ledstrips.push(ls1);
 
-    // TODO: Use counters to remove Duration conversions
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
     let mut last_loop_start = std::time::Instant::now();
     loop {
-        let time = std::time::Instant::now();
         lag = lag.checked_add(&chrono::Duration::from_std(last_loop_start.elapsed()).unwrap()).unwrap();
         last_loop_start = std::time::Instant::now();
         let current_sleep_duration = std::cmp::max(chrono::Duration::zero(), duration_per_tick.checked_sub(&lag).unwrap());
