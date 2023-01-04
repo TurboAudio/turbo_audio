@@ -1,22 +1,25 @@
 use crate::resources::color::{Color, BLACK};
 use rand::Rng;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct RaindropSettings {
     pub rain_speed: i32,
     pub drop_rate: f64,
 }
 
+#[derive(Debug)]
 pub struct Raindrops {
     pub id: i32,
     pub state: RaindropState,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum RipleDirection {
     Left,
     Right,
 }
+
+#[derive(Debug)]
 pub struct RaindropState {
     pub riples: Vec<(usize, Color, RipleDirection)>,
 }
@@ -38,7 +41,7 @@ pub fn update_raindrop(leds: &mut [Color], settings: &RaindropSettings, state: &
                 if current_position + SHIFT >= color_size {
                     continue;
                 }
-                (current_position + SHIFT) as usize
+                current_position + SHIFT
             }
         };
         const NUMERATOR: u8 = 3;
