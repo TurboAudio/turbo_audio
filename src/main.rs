@@ -18,6 +18,7 @@ use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
+use log;
 use pipewire_listener::PipewireController;
 
 use crate::resources::{
@@ -196,6 +197,7 @@ fn send_ledstrip_colors(
 }
 
 fn main() -> Result<(), RunLoopError> {
+    pretty_env_logger::init();
     let Args { settings_file } = Args::parse();
     let TurboAudioConfig {
         device_name,
@@ -203,7 +205,7 @@ fn main() -> Result<(), RunLoopError> {
         sample_rate,
         stream_connections,
     } = TurboAudioConfig::new(&settings_file).map_err(|e| {
-        eprintln!("{:?}", e);
+        log::error!("{:?}", e);
         RunLoopError::LoadConfigFile
     })?;
 
