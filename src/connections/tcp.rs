@@ -43,30 +43,31 @@ impl TcpConnection {
     ) {
         let buffer_size: NonZeroUsize = NonZeroUsize::new(64).unwrap();
         let (tx, mut rx) = ring_channel::<Vec<u8>>(buffer_size);
-        let connection_thread = thread::spawn(move || -> Result<(), TcpConnectionError> {
-            let mut disconnect_error = None;
-            loop {
-                let mut connection = TcpConnection::attempt_connection(ip, None, None).map_err(
-                    |connection_attempt_error| match disconnect_error {
-                        Some(error) => {
-                            TcpConnectionError::UnableToReconnect(connection_attempt_error, error)
-                        }
-                        None => TcpConnectionError::ConnectionFailed(connection_attempt_error),
-                    },
-                )?;
+        let connection_thread =
+            thread::spawn(move || -> Result<(), TcpConnectionError> {
+                let mut disconnect_error = None;
                 loop {
-                    match rx.recv() {
-                        Ok(data) => {
-                            if let Err(e) = connection.write_all(&data) {
-                                disconnect_error = Some(e);
-                                break;
+                    let mut connection = TcpConnection::attempt_connection(ip, None, None)
+                        .map_err(|attempt_error| match disconnect_error {
+                            Some(error) => {
+                                TcpConnectionError::UnableToReconnect(attempt_error, error)
                             }
+                            None => TcpConnectionError::ConnectionFailed(attempt_error),
+                        })?;
+
+                    loop {
+                        match rx.recv() {
+                            Ok(data) => {
+                                if let Err(e) = connection.write_all(&data) {
+                                    disconnect_error = Some(e);
+                                    break;
+                                }
+                            }
+                            Err(_) => return Ok(()),
                         }
-                        Err(_) => return Ok(()),
                     }
                 }
-            }
-        });
+            });
 
         (tx, connection_thread)
     }
