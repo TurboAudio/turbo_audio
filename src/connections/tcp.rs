@@ -13,8 +13,13 @@ pub struct TcpConnection {
 }
 
 enum TcpConnectionError {
-    ConnectionFailed(std::net::SocketAddr),
-    ConnectionConfigurationFailed(std::io::Error),
+    ConnectionFailed(ConnectionAttemptError),
+    UnableToReconnect(ConnectionAttemptError, std::io::Error),
+}
+
+enum ConnectionAttemptError {
+    Unreachable(std::net::SocketAddr),
+    ConfigurationFailed(std::io::Error),
 }
 
 impl TcpConnection {
@@ -39,13 +44,21 @@ impl TcpConnection {
         let buffer_size: NonZeroUsize = NonZeroUsize::new(64).unwrap();
         let (tx, mut rx) = ring_channel::<Vec<u8>>(buffer_size);
         let connection_thread = thread::spawn(move || -> Result<(), TcpConnectionError> {
+            let mut disconnect_error = None;
             loop {
-                let mut connection = TcpConnection::attempt_connection(ip, None, None)?;
+                let mut connection = TcpConnection::attempt_connection(ip, None, None).map_err(
+                    |connection_attempt_error| match disconnect_error {
+                        Some(error) => {
+                            TcpConnectionError::UnableToReconnect(connection_attempt_error, error)
+                        }
+                        None => TcpConnectionError::ConnectionFailed(connection_attempt_error),
+                    },
+                )?;
                 loop {
                     match rx.recv() {
                         Ok(data) => {
                             if let Err(e) = connection.write_all(&data) {
-                                eprintln!("Failed to send packet to connection. Error: {:?}", e);
+                                disconnect_error = Some(e);
                                 break;
                             }
                         }
@@ -62,7 +75,7 @@ impl TcpConnection {
         ip: std::net::SocketAddr,
         max_connection_attempts: Option<i32>,
         connection_timeout: Option<Duration>,
-    ) -> Result<TcpStream, TcpConnectionError> {
+    ) -> Result<TcpStream, ConnectionAttemptError> {
         let max_connection_attempts = max_connection_attempts.unwrap_or(20);
         let connection_timeout = connection_timeout.unwrap_or(Duration::from_secs(3));
         for _ in 0..max_connection_attempts {
@@ -71,13 +84,13 @@ impl TcpConnection {
                 Ok(stream) => {
                     stream
                         .set_write_timeout(Some(Duration::from_millis(100)))
-                        .map_err(TcpConnectionError::ConnectionConfigurationFailed)?;
+                        .map_err(ConnectionAttemptError::ConfigurationFailed)?;
                     return Ok(stream);
                 }
                 Err(_) => continue,
             }
         }
-        Err(TcpConnectionError::ConnectionFailed(ip))
+        Err(ConnectionAttemptError::Unreachable(ip))
     }
 }
 
