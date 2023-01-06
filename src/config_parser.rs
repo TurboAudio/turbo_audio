@@ -19,8 +19,8 @@ impl TurboAudioConfig {
         {
             Ok(settings) => settings,
             Err(error) => {
-                println!("{:?}", error);
-                println!("Failed to get settings file. Default values used");
+                log::error!("{:?}", error);
+                log::info!("Failed to get settings file. Default values used");
                 return Ok(TurboAudioConfig::default());
             }
         };
