@@ -13,7 +13,7 @@ use std::{
     net::{Ipv4Addr, SocketAddrV4},
 };
 
-use anyhow::{anyhow, Ok, Result};
+use anyhow::anyhow;
 use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
@@ -38,7 +38,15 @@ struct Args {
     settings_file: String,
 }
 
-fn test_and_run_loop() {
+#[derive(Debug)]
+enum RunLoopError {
+    LoadEffect,
+    LoadConfigFile,
+    StartAudioLoop,
+    StartPipewireStream,
+}
+
+fn test_and_run_loop() -> Result<(), RunLoopError> {
     let mut settings: HashMap<i32, Settings> = HashMap::default();
     let mut effects: HashMap<i32, Effect> = HashMap::default();
     let mut effect_settings: HashMap<i32, i32> = HashMap::default();
@@ -73,13 +81,11 @@ fn test_and_run_loop() {
     effects.insert(20, Effect::Raindrop(raindrop));
     effect_settings.insert(20, 1);
 
-    let lua_effect = match LuaEffect::new("scripts/fade.lua") {
-        Ok(effect) => effect,
-        Err(e) => {
-            eprint!("Error: {:?}", e);
-            return;
-        }
-    };
+    let lua_effect = LuaEffect::new("scripts/fade.lua").map_err(|e| {
+        eprintln!("{:?}", e);
+        RunLoopError::LoadEffect
+    })?;
+
     effects.insert(30, Effect::Lua(lua_effect));
     effect_settings.insert(30, 2);
 
@@ -189,18 +195,30 @@ fn send_ledstrip_colors(
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<(), RunLoopError> {
     let Args { settings_file } = Args::parse();
     let TurboAudioConfig {
         device_name,
         jack,
         sample_rate,
         stream_connections,
-    } = TurboAudioConfig::new(&settings_file)?;
+    } = TurboAudioConfig::new(&settings_file).map_err(|e| {
+        eprintln!("{:?}", e);
+        RunLoopError::LoadConfigFile
+    })?;
 
-    let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())?;
+    let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())
+        .map_err(|e| {
+            eprintln!("{:?}", e);
+            RunLoopError::StartAudioLoop
+        })?;
     let pipewire_controller = PipewireController::new();
-    pipewire_controller.set_stream_connections(stream_connections)?;
-    test_and_run_loop();
+    pipewire_controller
+        .set_stream_connections(stream_connections)
+        .map_err(|e| {
+            eprintln!("{:?}", e);
+            RunLoopError::StartPipewireStream
+        })?;
+    test_and_run_loop()?;
     Ok(())
 }
