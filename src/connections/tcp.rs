@@ -31,8 +31,8 @@ impl TcpConnection {
         }
     }
 
-    pub fn send_data(&mut self, packet: Vec<u8>) -> Result<Option<Vec<u8>>, SendError<Vec<u8>>> {
-        self.data_queue.send(packet)
+    pub fn send_data(&mut self, packet: Vec<u8>) -> Result<(), SendError<Vec<u8>>> {
+        self.data_queue.send(packet).map(|_| ())
     }
 
     fn start_connection_thread(
