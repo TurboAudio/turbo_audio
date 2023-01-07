@@ -108,9 +108,9 @@ impl Drop for TcpConnection {
     fn drop(&mut self) {
         if let Some(connection) = std::mem::replace(&mut self.connection_thread, None) {
             if let Err(e) = connection.join() {
-                eprintln!("Error in connection thread {:?}", e);
+                log::error!("Error in connection thread {:?}", e);
             }
-            println!("Connection thread joined.");
+            log::info!("Tcp connection thread joined.");
         }
     }
 }

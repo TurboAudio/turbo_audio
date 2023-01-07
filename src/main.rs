@@ -82,7 +82,7 @@ fn test_and_run_loop() -> Result<(), RunLoopError> {
     effect_settings.insert(20, 1);
 
     let lua_effect = LuaEffect::new("scripts/fade.lua").map_err(|e| {
-        eprintln!("{:?}", e);
+        log::error!("{:?}", e);
         RunLoopError::LoadEffect
     })?;
 
@@ -151,7 +151,7 @@ fn update_ledstrips(
                 }
                 (Effect::Lua(lua), Some(Settings::Lua(settings))) => {
                     if let Err(e) = lua.tick(leds, settings) {
-                        eprintln!("Error when executing lua function: {:?}", e);
+                        log::error!("Error when executing lua function: {:?}", e);
                     }
                 }
                 _ => panic!("Effect doesn't match settings"),
@@ -180,7 +180,7 @@ fn send_ledstrip_colors(
                 Connection::Tcp(tcp_connection) => {
                     // If send fails, connection is closed.
                     if let Err(error) = tcp_connection.send_data(data) {
-                        eprintln!("{:?}", error);
+                        log::error!("{:?}", error);
                         connections.remove(&connection_id);
                         ledstrip.connection_id = None;
                     };
@@ -196,6 +196,7 @@ fn send_ledstrip_colors(
 }
 
 fn main() -> Result<(), RunLoopError> {
+    pretty_env_logger::init();
     let Args { settings_file } = Args::parse();
     let TurboAudioConfig {
         device_name,
@@ -203,20 +204,20 @@ fn main() -> Result<(), RunLoopError> {
         sample_rate,
         stream_connections,
     } = TurboAudioConfig::new(&settings_file).map_err(|e| {
-        eprintln!("{:?}", e);
+        log::error!("{:?}", e);
         RunLoopError::LoadConfigFile
     })?;
 
     let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())
         .map_err(|e| {
-            eprintln!("{:?}", e);
+            log::error!("{:?}", e);
             RunLoopError::StartAudioLoop
         })?;
     let pipewire_controller = PipewireController::new();
     pipewire_controller
         .set_stream_connections(stream_connections)
         .map_err(|e| {
-            eprintln!("{:?}", e);
+            log::error!("{:?}", e);
             RunLoopError::StartPipewireStream
         })?;
     test_and_run_loop()?;

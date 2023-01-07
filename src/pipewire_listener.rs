@@ -156,20 +156,20 @@ fn pipewire_thread(
                     let mut state = state.lock().unwrap();
                     state
                         .add_node(global)
-                        .unwrap_or_else(|err| println!("{}", err));
+                        .unwrap_or_else(|err| log::error!("{}", err));
                 }
                 pipewire::types::ObjectType::Port => {
                     let mut state = state.lock().unwrap();
                     state
                         .add_port(global)
-                        .unwrap_or_else(|err| println!("{}", err));
+                        .unwrap_or_else(|err| log::error!("{}", err));
                     add_missing_connections(&core, &state, &stream_connections.borrow_mut());
                 }
                 pipewire::types::ObjectType::Link => {
                     let mut state = state.lock().unwrap();
                     state
                         .add_link(global)
-                        .unwrap_or_else(|err| println!("{}", err));
+                        .unwrap_or_else(|err| log::error!("{}", err));
                     if let Some(new_link) = state.links.get(&global.id) {
                         check_remove_link(
                             &state,
@@ -177,7 +177,7 @@ fn pipewire_thread(
                             new_link,
                             &stream_connections.borrow_mut(),
                         )
-                        .unwrap_or_else(|err| println!("{}", err));
+                        .unwrap_or_else(|err| log::error!("{}", err));
                     }
                 }
                 _ => {}
@@ -191,7 +191,7 @@ fn pipewire_thread(
                 let mut state = state.lock().unwrap();
                 state
                     .remove_object(id)
-                    .unwrap_or_else(|err| println!("{}", err));
+                    .unwrap_or_else(|err| log::error!("{}", err));
                 add_missing_connections(&core, &state, &stream_connections.borrow_mut());
             }
         })
@@ -203,7 +203,7 @@ fn pipewire_thread(
             *stream_connections.borrow_mut() = new_stream_connections;
             for link in state.links.values().clone() {
                 check_remove_link(&state, &registry, link, &stream_connections.borrow_mut())
-                    .unwrap_or_else(|err| println!("{}", err));
+                    .unwrap_or_else(|err| log::error!("{}", err));
             }
             add_missing_connections(&core, &state, &stream_connections.borrow_mut());
         }

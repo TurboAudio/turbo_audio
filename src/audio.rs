@@ -21,13 +21,13 @@ pub fn start_audio_loop(
             let stream_result = start_stream(&config, &audio_device, &sample_format);
             match stream_result {
                 Ok(result) => {
-                    println!("Started audio stream");
+                    log::trace!("Started audio stream");
                     Ok(result)
                 }
                 Err(err) => {
-                    println!("Failed to start audio stream");
+                    log::trace!("Failed to start audio stream");
                     if retry_attempt < max_retries.try_into().unwrap() {
-                        println!("Retrying to start audio stream...");
+                        log::trace!("Retrying to start audio stream...");
                     }
                     Err(err)
                 }
