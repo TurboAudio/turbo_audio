@@ -46,23 +46,29 @@ impl TcpConnection {
         let connection_thread =
             thread::spawn(move || -> Result<(), TcpConnectionError> {
                 let mut disconnect_error = None;
+                // This loop essures we keep reconnecting if possible
                 loop {
                     let mut connection = TcpConnection::attempt_connection(ip, None, None)
                         .map_err(|attempt_error| match disconnect_error {
-                            Some(error) => {
-                                TcpConnectionError::UnableToReconnect(attempt_error, error)
+                            Some(disconnect_error) => {
+                                // This error comes from the last disconnect
+                                TcpConnectionError::UnableToReconnect(attempt_error, disconnect_error)
                             }
                             None => TcpConnectionError::ConnectionFailed(attempt_error),
                         })?;
 
+                    // This loop sends the packets in data_queue through the TCP socket
                     loop {
                         match rx.recv() {
                             Ok(data) => {
                                 if let Err(e) = connection.write_all(&data) {
                                     disconnect_error = Some(e);
+                                    // We break from this loop to allow reconnection to happen
                                     break;
                                 }
                             }
+                            // If an error occurs, the data_queue has no more sender
+                            // and meaning the thread can exit correctly
                             Err(_) => return Ok(()),
                         }
                     }
