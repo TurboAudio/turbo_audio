@@ -52,7 +52,10 @@ impl TcpConnection {
                         .map_err(|attempt_error| match disconnect_error {
                             Some(disconnect_error) => {
                                 // This error comes from the last disconnect
-                                TcpConnectionError::UnableToReconnect(attempt_error, disconnect_error)
+                                TcpConnectionError::UnableToReconnect(
+                                    attempt_error,
+                                    disconnect_error,
+                                )
                             }
                             None => TcpConnectionError::ConnectionFailed(attempt_error),
                         })?;
