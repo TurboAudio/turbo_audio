@@ -1,4 +1,5 @@
 mod audio;
+mod audio_processing;
 mod config_parser;
 mod connections;
 mod pipewire_listener;
@@ -11,6 +12,8 @@ use resources::{
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddrV4},
+    thread,
+    time::Duration,
 };
 
 use anyhow::anyhow;
@@ -220,6 +223,25 @@ fn main() -> Result<(), RunLoopError> {
             log::error!("{:?}", e);
             RunLoopError::StartPipewireStream
         })?;
-    test_and_run_loop()?;
-    Ok(())
+    let audio_processor = audio_processing::AudioSignalProcessor::new(_rx);
+    let fft_result = audio_processor.get_fft_result();
+    loop {
+        if let Ok(result) = fft_result.read() {
+            let formated = result[..result.len() / 2]
+                .iter()
+                .cloned()
+                .map(|e| e.norm_sqr() as f32)
+                .collect::<Vec<_>>();
+            let max = formated
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.total_cmp(b))
+                .map(|(index, _)| index);
+            println!("{:?}", formated);
+            println!("{:?}", max);
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+    // test_and_run_loop()?;
+    // Ok(())
 }
