@@ -1,11 +1,12 @@
 use std::{
-    sync::{mpsc::Receiver, Arc, RwLock},
+    sync::{Arc, RwLock},
     thread::JoinHandle,
 };
 
 use dasp::Sample;
 use dasp_signal::Signal;
 use dasp_window::Window;
+use ring_channel::*;
 use rustfft::{num_complex::Complex, num_traits::ToPrimitive};
 
 type FftResult = Arc<RwLock<Vec<Complex<f64>>>>;
@@ -15,7 +16,7 @@ pub struct AudioSignalProcessor {
 }
 
 impl AudioSignalProcessor {
-    pub fn new(audio_rx: Receiver<i16>) -> Self {
+    pub fn new(audio_rx: RingReceiver<i16>) -> Self {
         let fft_result = FftResult::default();
         let audio_processing_thread = Self::start_audio_processing(audio_rx, fft_result.clone());
 
@@ -26,7 +27,7 @@ impl AudioSignalProcessor {
     }
 
     fn start_audio_processing(
-        audio_rx: Receiver<i16>,
+        mut audio_rx: RingReceiver<i16>,
         latest_result: FftResult,
     ) -> JoinHandle<()> {
         std::thread::spawn(move || {
@@ -50,8 +51,13 @@ impl AudioSignalProcessor {
                         .take(FFT_SIZE)
                         .enumerate()
                         .map(|(index, value)| {
-                            let hann_factor = dasp_window::Hanning::window(index.to_f64().unwrap() / (FFT_SIZE.to_f64().unwrap() - 1.0));
-                            Complex::<f64> { re: value * hann_factor, im: 0.0}
+                            let hann_factor = dasp_window::Hanning::window(
+                                index.to_f64().unwrap() / (FFT_SIZE.to_f64().unwrap() - 1.0),
+                            );
+                            Complex::<f64> {
+                                re: value * hann_factor,
+                                im: 0.0,
+                            }
                         })
                         .collect();
 

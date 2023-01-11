@@ -225,7 +225,7 @@ fn main() -> Result<(), RunLoopError> {
         })?;
     let audio_processor = audio_processing::AudioSignalProcessor::new(_rx);
     let fft_result = audio_processor.get_fft_result();
-    loop {
+    for _ in 0..10 {
         if let Ok(result) = fft_result.read() {
             let formated = result[..result.len() / 2]
                 .iter()
@@ -242,6 +242,6 @@ fn main() -> Result<(), RunLoopError> {
         }
         thread::sleep(Duration::from_secs(1));
     }
-    // test_and_run_loop()?;
-    // Ok(())
+    test_and_run_loop()?;
+    Ok(())
 }
