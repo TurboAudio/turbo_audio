@@ -51,11 +51,14 @@ impl LuaEffect {
         &mut self,
         leds: &mut [Color],
         settings: &LuaEffectSettings,
+        fft_result: &[f32],
     ) -> Result<(), LuaEffectRuntimeError> {
         self.lua
             .globals()
             .set("settings", self.lua.to_value(&settings.settings).unwrap())
             .map_err(LuaEffectRuntimeError::Lua)?;
+
+        self.lua.globals().set("Fft_Result", fft_result).unwrap();
 
         let resize_fn: Function = self
             .lua

@@ -4,6 +4,7 @@ mod config_parser;
 mod connections;
 mod pipewire_listener;
 mod resources;
+use audio_processing::AudioSignalProcessor;
 use resources::{
     color::Color,
     effects::{moody::update_moody, raindrop::update_raindrop},
@@ -12,8 +13,6 @@ use resources::{
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddrV4},
-    thread,
-    time::Duration,
 };
 
 use anyhow::anyhow;
@@ -49,7 +48,7 @@ enum RunLoopError {
     StartPipewireStream,
 }
 
-fn test_and_run_loop() -> Result<(), RunLoopError> {
+fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), RunLoopError> {
     let mut settings: HashMap<i32, Settings> = HashMap::default();
     let mut effects: HashMap<i32, Effect> = HashMap::default();
     let mut effect_settings: HashMap<i32, i32> = HashMap::default();
@@ -84,7 +83,7 @@ fn test_and_run_loop() -> Result<(), RunLoopError> {
     effects.insert(20, Effect::Raindrop(raindrop));
     effect_settings.insert(20, 1);
 
-    let lua_effect = LuaEffect::new("scripts/fade.lua").map_err(|e| {
+    let lua_effect = LuaEffect::new("scripts/sketchers.lua").map_err(|e| {
         log::error!("{:?}", e);
         RunLoopError::LoadEffect
     })?;
@@ -92,7 +91,7 @@ fn test_and_run_loop() -> Result<(), RunLoopError> {
     effects.insert(30, Effect::Lua(lua_effect));
     effect_settings.insert(30, 2);
 
-    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 200), 1234));
+    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 14), 1234));
     let connection = TcpConnection::new(ip);
     let connection_id = 1;
     connections.insert(connection_id, Connection::Tcp(connection));
@@ -117,13 +116,21 @@ fn test_and_run_loop() -> Result<(), RunLoopError> {
             duration_per_tick.checked_sub(&lag).unwrap(),
         );
         std::thread::sleep(current_sleep_duration.to_std().unwrap());
-
+        let fft_result = get_fft(&mut audio_processor);
         let _update_result =
-            update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
+            update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings, fft_result);
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
     }
+}
+
+fn get_fft(audio_processor: &mut AudioSignalProcessor) -> Vec<f32> {
+    let fft_result = audio_processor.compute_fft();
+    fft_result[..fft_result.len() / 2]
+        .iter()
+        .map(|e| e.norm_sqr() as f32)
+        .collect::<Vec<_>>()
 }
 
 fn update_ledstrips(
@@ -131,6 +138,7 @@ fn update_ledstrips(
     effects: &mut HashMap<i32, Effect>,
     effect_settings: &HashMap<i32, i32>,
     settings: &HashMap<i32, Settings>,
+    fft_result: Vec<f32>,
 ) -> anyhow::Result<()> {
     for ledstrip in ledstrips {
         for (effect_id, interval) in &ledstrip.effects {
@@ -153,7 +161,7 @@ fn update_ledstrips(
                     update_raindrop(leds, settings, &mut raindrop.state);
                 }
                 (Effect::Lua(lua), Some(Settings::Lua(settings))) => {
-                    if let Err(e) = lua.tick(leds, settings) {
+                    if let Err(e) = lua.tick(leds, settings, &fft_result) {
                         log::error!("Error when executing lua function: {:?}", e);
                     }
                 }
@@ -224,26 +232,7 @@ fn main() -> Result<(), RunLoopError> {
             RunLoopError::StartPipewireStream
         })?;
 
-    let mut audio_processor = audio_processing::AudioSignalProcessor::new(audio_rx);
-    for _ in 0..100 {
-        let fft_result = audio_processor.compute_fft();
-        if let Some(result) = fft_result {
-            let formated = result[..result.len() / 2]
-                .iter()
-                .cloned()
-                .map(|e| e.norm_sqr() as f32)
-                .collect::<Vec<_>>();
-            let max = formated
-                .iter()
-                .enumerate()
-                .max_by(|(_, a), (_, b)| a.total_cmp(b))
-                .map(|(index, _)| index);
-            println!("{:?}", formated);
-            println!("{:?}", max);
-        }
-        thread::sleep(Duration::from_secs(1));
-    }
-
-    test_and_run_loop()?;
+    let audio_processor = audio_processing::AudioSignalProcessor::new(audio_rx);
+    test_and_run_loop(audio_processor)?;
     Ok(())
 }

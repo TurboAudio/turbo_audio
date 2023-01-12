@@ -27,7 +27,7 @@ impl AudioSignalProcessor {
         }
     }
 
-    pub fn compute_fft(&mut self) -> Option<FftResult> {
+    pub fn compute_fft(&mut self) -> FftResult {
         let sample_count = self.audio_sample_rx.pop_slice(self.tmp_vec.as_mut_slice());
         self.tmp_vec.iter().take(sample_count).for_each(|sample| {
             self.audio_sample_buffer.push(*sample);
@@ -55,6 +55,6 @@ impl AudioSignalProcessor {
         self.fft_plan
             .process_with_scratch(&mut window[..], &mut self.fft_compute_buffer[..]);
 
-        Some(window)
+        window
     }
 }
