@@ -28,7 +28,7 @@ function Tick()
             Colors[#Colors - index].b = Colors[#Colors - index - 1].b
         end
     end
-	Colors[1].r = math.floor(math.min(Low_Frequency_Amplitude, 255))
-	Colors[1].g = math.floor(math.min(Mid_Frequency_Amplitude, 255))
-	Colors[1].b = math.floor(math.min(High_Frequency_Amplitude, 255))
+	Colors[1].r = math.floor(math.min((Low_Frequency_Amplitude * 255), 255))
+	Colors[1].g = math.floor(math.min(2 * (Mid_Frequency_Amplitude * 255), 255))
+	Colors[1].b = math.floor(math.min(2 * (High_Frequency_Amplitude * 255), 255))
 end

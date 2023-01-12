@@ -7,6 +7,7 @@ use std::sync::Arc;
 pub struct FftResult {
     pub raw_bins: Vec<Complex<f64>>,
     sample_rate: usize,
+    fft_size: usize,
 }
 
 impl FftResult {
@@ -14,13 +15,14 @@ impl FftResult {
         Self {
             raw_bins,
             sample_rate: 48000,
+            fft_size: 1024,
         }
     }
 
     pub fn get_frequency_bin(&self, frequency: usize) -> Option<f64> {
         let bin_size = (self.sample_rate / 2) / (self.raw_bins.len() / 2);
         let bin = self.raw_bins.get(frequency / bin_size)?;
-        Some(bin.norm_sqr())
+        Some(bin.norm_sqr() / self.fft_size.to_f64().unwrap_or(1.0))
     }
 
     pub fn get_low_frequency_amplitude(&self) -> f64 {
