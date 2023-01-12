@@ -16,14 +16,16 @@ pub struct AudioSignalProcessor {
     audio_sample_buffer: Arc<Mutex<dasp_ring_buffer::Fixed<[i16; FFT_SIZE]>>>,
     audio_processing_thread: Option<JoinHandle<()>>,
     fft_plan: Arc<dyn rustfft::Fft<f64>>,
-    fft_compute_buffer: Vec<Complex::<f64>>,
+    fft_compute_buffer: Vec<Complex<f64>>,
 }
 
 impl AudioSignalProcessor {
     pub fn new() -> Self {
         let mut planner = rustfft::FftPlanner::new();
         Self {
-            audio_sample_buffer: Arc::new(Mutex::new(dasp_ring_buffer::Fixed::from([0i16; FFT_SIZE]))),
+            audio_sample_buffer: Arc::new(Mutex::new(dasp_ring_buffer::Fixed::from(
+                [0i16; FFT_SIZE],
+            ))),
             audio_processing_thread: None,
             fft_compute_buffer: vec![Complex::<f64>::default(); FFT_SIZE],
             fft_plan: planner.plan_fft_forward(FFT_SIZE),
@@ -43,26 +45,32 @@ impl AudioSignalProcessor {
     }
 
     pub fn compute_fft(&mut self) -> Option<FftResult> {
-        if let Ok(audio_sample_buffer) = self.audio_sample_buffer.lock() {
-            let mut window: Vec<Complex<f64>> =
-                dasp_signal::from_iter(audio_sample_buffer.iter().map(|e| e.to_sample::<f64>()))
-                    .scale_amp(1.0)
-                    .take(FFT_SIZE)
-                    .enumerate()
-                    .map(|(index, value)| {
-                        let hann_factor = dasp_window::Hanning::window(
-                            index.to_f64().unwrap() / (FFT_SIZE.to_f64().unwrap() - 1.0),
-                        );
-                        Complex::<f64> {
-                            re: value * hann_factor,
-                            im: 0.0,
-                        }
-                    })
-                    .collect();
-            self.fft_plan.process_with_scratch(&mut window[..], &mut self.fft_compute_buffer[..]);
-            return Some(window);
-        }
-        None
+        let audio_sample_copy: Vec<i16> = self
+            .audio_sample_buffer
+            .lock()
+            .ok()?
+            .iter()
+            .copied()
+            .collect();
+
+        let mut window: Vec<Complex<f64>> =
+            dasp_signal::from_iter(audio_sample_copy.iter().map(|e| e.to_sample::<f64>()))
+                .scale_amp(1.0)
+                .take(FFT_SIZE)
+                .enumerate()
+                .map(|(index, value)| {
+                    let hann_factor = dasp_window::Hanning::window(
+                        index.to_f64().unwrap() / (FFT_SIZE.to_f64().unwrap() - 1.0),
+                    );
+                    Complex::<f64> {
+                        re: value * hann_factor,
+                        im: 0.0,
+                    }
+                })
+                .collect();
+        self.fft_plan
+            .process_with_scratch(&mut window[..], &mut self.fft_compute_buffer[..]);
+        Some(window)
     }
 }
 
