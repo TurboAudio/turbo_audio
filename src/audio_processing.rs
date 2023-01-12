@@ -4,7 +4,49 @@ use dasp_window::Window;
 use rustfft::{num_complex::Complex, num_traits::ToPrimitive};
 use std::sync::Arc;
 
-type FftResult = Vec<Complex<f64>>;
+pub struct FftResult {
+    pub raw_bins: Vec<Complex<f64>>,
+    sample_rate: usize,
+}
+
+impl FftResult {
+    pub fn new(raw_bins: Vec<Complex<f64>>) -> Self {
+        Self {
+            raw_bins,
+            sample_rate: 48000,
+        }
+    }
+
+    pub fn get_frequency_bin(&self, frequency: usize) -> Option<f64> {
+        let bin_size = (self.sample_rate / 2) / (self.raw_bins.len() / 2);
+        let bin = self.raw_bins.get(frequency / bin_size)?;
+        Some(bin.norm_sqr())
+    }
+
+    pub fn get_low_frequency_amplitude(&self) -> f64 {
+        let (min_freq, max_freq): (usize, usize) = (0, 100);
+        self.get_frequency_interval_average_amplitude(min_freq, max_freq).unwrap_or(0.0)
+    }
+
+    pub fn get_mid_frequency_amplitude(&self) -> f64 {
+        let (min_freq, max_freq): (usize, usize) = (100, 1000);
+        self.get_frequency_interval_average_amplitude(min_freq, max_freq).unwrap_or(0.0)
+    }
+
+    pub fn get_high_frequency_amplitude(&self) -> f64 {
+        let (min_freq, max_freq): (usize, usize) = (1000, 2000);
+        self.get_frequency_interval_average_amplitude(min_freq, max_freq).unwrap_or(0.0)
+    }
+
+    pub fn get_frequency_interval_average_amplitude(&self, min_freq: usize, max_freq: usize) -> Option<f64> {
+        let sum = (min_freq..max_freq)
+            .map(|frequency| self.get_frequency_bin(frequency).unwrap_or(0f64))
+            .reduce(|accumulator, frequency| accumulator + frequency)?;
+        let interval_size = (max_freq - min_freq).to_f64()?;
+        Some(sum / interval_size)
+    }
+}
+
 const FFT_SIZE: usize = 1024;
 
 pub struct AudioSignalProcessor {
@@ -55,6 +97,6 @@ impl AudioSignalProcessor {
         self.fft_plan
             .process_with_scratch(&mut window[..], &mut self.fft_compute_buffer[..]);
 
-        window
+        FftResult::new(window)
     }
 }

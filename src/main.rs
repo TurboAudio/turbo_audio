@@ -4,7 +4,7 @@ mod config_parser;
 mod connections;
 mod pipewire_listener;
 mod resources;
-use audio_processing::AudioSignalProcessor;
+use audio_processing::{AudioSignalProcessor, FftResult};
 use resources::{
     color::Color,
     effects::{moody::update_moody, raindrop::update_raindrop},
@@ -116,21 +116,13 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
             duration_per_tick.checked_sub(&lag).unwrap(),
         );
         std::thread::sleep(current_sleep_duration.to_std().unwrap());
-        let fft_result = get_fft(&mut audio_processor);
+        let fft_result = audio_processor.compute_fft();
         let _update_result =
-            update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings, fft_result);
+            update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings, &fft_result);
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
     }
-}
-
-fn get_fft(audio_processor: &mut AudioSignalProcessor) -> Vec<f32> {
-    let fft_result = audio_processor.compute_fft();
-    fft_result[..fft_result.len() / 2]
-        .iter()
-        .map(|e| e.norm_sqr() as f32)
-        .collect::<Vec<_>>()
 }
 
 fn update_ledstrips(
@@ -138,7 +130,7 @@ fn update_ledstrips(
     effects: &mut HashMap<i32, Effect>,
     effect_settings: &HashMap<i32, i32>,
     settings: &HashMap<i32, Settings>,
-    fft_result: Vec<f32>,
+    fft_result: &FftResult,
 ) -> anyhow::Result<()> {
     for ledstrip in ledstrips {
         for (effect_id, interval) in &ledstrip.effects {
@@ -161,7 +153,7 @@ fn update_ledstrips(
                     update_raindrop(leds, settings, &mut raindrop.state);
                 }
                 (Effect::Lua(lua), Some(Settings::Lua(settings))) => {
-                    if let Err(e) = lua.tick(leds, settings, &fft_result) {
+                    if let Err(e) = lua.tick(leds, settings, fft_result) {
                         log::error!("Error when executing lua function: {:?}", e);
                     }
                 }
