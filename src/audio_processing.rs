@@ -28,11 +28,10 @@ impl AudioSignalProcessor {
     }
 
     pub fn compute_fft(&mut self) -> Option<FftResult> {
-        let sample_size = self.audio_sample_rx.pop_slice(self.tmp_vec.as_mut_slice());
-        let samples = self.tmp_vec.iter().take(sample_size);
-        for sample in samples {
+        let sample_count = self.audio_sample_rx.pop_slice(self.tmp_vec.as_mut_slice());
+        self.tmp_vec.iter().take(sample_count).for_each(|sample| {
             self.audio_sample_buffer.push(*sample);
-        }
+        });
 
         let mut window: Vec<Complex<f64>> = dasp_signal::from_iter(
             self.audio_sample_buffer
@@ -52,8 +51,10 @@ impl AudioSignalProcessor {
             }
         })
         .collect();
+
         self.fft_plan
             .process_with_scratch(&mut window[..], &mut self.fft_compute_buffer[..]);
+
         Some(window)
     }
 }
