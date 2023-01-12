@@ -1,4 +1,4 @@
-use crate::{resources::color::Color, audio_processing::FftResult};
+use crate::{audio_processing::FftResult, resources::color::Color};
 use jsonschema::JSONSchema;
 use mlua::{Error, Function, Lua, LuaSerdeExt, Table, Value};
 use std::fs;
@@ -58,9 +58,27 @@ impl LuaEffect {
             .set("settings", self.lua.to_value(&settings.settings).unwrap())
             .map_err(LuaEffectRuntimeError::Lua)?;
 
-        self.lua.globals().set("Low_Frequency_Amplitude", fft_result.get_low_frequency_amplitude()).unwrap();
-        self.lua.globals().set("Mid_Frequency_Amplitude", fft_result.get_mid_frequency_amplitude()).unwrap();
-        self.lua.globals().set("High_Frequency_Amplitude", fft_result.get_high_frequency_amplitude()).unwrap();
+        self.lua
+            .globals()
+            .set(
+                "Low_Frequency_Amplitude",
+                fft_result.get_low_frequency_amplitude(),
+            )
+            .unwrap();
+        self.lua
+            .globals()
+            .set(
+                "Mid_Frequency_Amplitude",
+                fft_result.get_mid_frequency_amplitude(),
+            )
+            .unwrap();
+        self.lua
+            .globals()
+            .set(
+                "High_Frequency_Amplitude",
+                fft_result.get_high_frequency_amplitude(),
+            )
+            .unwrap();
 
         let resize_fn: Function = self
             .lua

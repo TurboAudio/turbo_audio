@@ -27,20 +27,27 @@ impl FftResult {
 
     pub fn get_low_frequency_amplitude(&self) -> f64 {
         let (min_freq, max_freq): (usize, usize) = (0, 100);
-        self.get_frequency_interval_average_amplitude(min_freq, max_freq).unwrap_or(0.0)
+        self.get_frequency_interval_average_amplitude(min_freq, max_freq)
+            .unwrap_or(0.0)
     }
 
     pub fn get_mid_frequency_amplitude(&self) -> f64 {
         let (min_freq, max_freq): (usize, usize) = (100, 1000);
-        self.get_frequency_interval_average_amplitude(min_freq, max_freq).unwrap_or(0.0)
+        self.get_frequency_interval_average_amplitude(min_freq, max_freq)
+            .unwrap_or(0.0)
     }
 
     pub fn get_high_frequency_amplitude(&self) -> f64 {
         let (min_freq, max_freq): (usize, usize) = (1000, 2000);
-        self.get_frequency_interval_average_amplitude(min_freq, max_freq).unwrap_or(0.0)
+        self.get_frequency_interval_average_amplitude(min_freq, max_freq)
+            .unwrap_or(0.0)
     }
 
-    pub fn get_frequency_interval_average_amplitude(&self, min_freq: usize, max_freq: usize) -> Option<f64> {
+    pub fn get_frequency_interval_average_amplitude(
+        &self,
+        min_freq: usize,
+        max_freq: usize,
+    ) -> Option<f64> {
         let sum = (min_freq..max_freq)
             .map(|frequency| self.get_frequency_bin(frequency).unwrap_or(0f64))
             .reduce(|accumulator, frequency| accumulator + frequency)?;

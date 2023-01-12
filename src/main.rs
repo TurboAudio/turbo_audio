@@ -117,8 +117,13 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
         );
         std::thread::sleep(current_sleep_duration.to_std().unwrap());
         let fft_result = audio_processor.compute_fft();
-        let _update_result =
-            update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings, &fft_result);
+        let _update_result = update_ledstrips(
+            &mut ledstrips,
+            &mut effects,
+            &effect_settings,
+            &settings,
+            &fft_result,
+        );
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
