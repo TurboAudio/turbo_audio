@@ -2,14 +2,13 @@ use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig};
 use retry::{delay::Exponential, retry_with_index};
-use ring_channel::*;
-use std::num::NonZeroUsize;
+use ringbuf::{HeapConsumer, HeapProducer};
 
 pub fn start_audio_loop(
     device_name: Option<String>,
     use_jack: bool,
     sample_rate: u32,
-) -> anyhow::Result<(cpal::Stream, RingReceiver<i16>)> {
+) -> anyhow::Result<(cpal::Stream, HeapConsumer<i16>)> {
     let audio_device = get_audio_device(device_name, use_jack);
     let input_config = get_input_config(&audio_device, sample_rate);
     let sample_format = input_config.sample_format();
@@ -75,7 +74,7 @@ fn get_input_config(audio_device: &Device, sample_rate: u32) -> SupportedStreamC
 fn build_audio_stream<T: cpal::Sample>(
     audio_device: &Device,
     config: &StreamConfig,
-    mut tx: RingSender<i16>,
+    mut tx: HeapProducer<i16>,
 ) -> Result<cpal::Stream, cpal::BuildStreamError> {
     let err_fn = |err| {
         panic!("ERROR: {:?}", err);
@@ -85,7 +84,7 @@ fn build_audio_stream<T: cpal::Sample>(
         config,
         move |data: &[T], _: &InputCallbackInfo| {
             for point in data {
-                let _ = tx.send(point.to_i16());
+                let _ = tx.push(point.to_i16());
             }
         },
         err_fn,
@@ -96,9 +95,8 @@ fn start_stream(
     config: &StreamConfig,
     audio_device: &Device,
     sample_format: &SampleFormat,
-) -> Result<(cpal::Stream, RingReceiver<i16>), cpal::BuildStreamError> {
-    let buffer_size: NonZeroUsize = NonZeroUsize::new(1024).unwrap();
-    let (tx, rx) = ring_channel::<i16>(buffer_size);
+) -> Result<(cpal::Stream, HeapConsumer<i16>), cpal::BuildStreamError> {
+    let (tx, rx) = ringbuf::HeapRb::<i16>::new(1024).split();
     let stream = match sample_format {
         SampleFormat::U16 => build_audio_stream::<u16>(audio_device, config, tx),
         SampleFormat::I16 => build_audio_stream::<i16>(audio_device, config, tx),

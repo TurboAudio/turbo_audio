@@ -224,8 +224,7 @@ fn main() -> Result<(), RunLoopError> {
             RunLoopError::StartPipewireStream
         })?;
 
-    let mut audio_processor = audio_processing::AudioSignalProcessor::new();
-    audio_processor.start_audio_processing(audio_rx);
+    let mut audio_processor = audio_processing::AudioSignalProcessor::new(audio_rx);
     for _ in 0..100 {
         let fft_result = audio_processor.compute_fft();
         if let Some(result) = fft_result {
