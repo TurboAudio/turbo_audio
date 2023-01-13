@@ -13,10 +13,7 @@ impl FftResult {
     pub fn new(raw_bins: Vec<f64>) -> Self {
         const SAMPLE_RATE: usize = 48000;
         let bin_size = (SAMPLE_RATE / 2) / (raw_bins.len() / 2);
-        Self {
-            raw_bins,
-            bin_size,
-        }
+        Self { raw_bins, bin_size }
     }
 
     pub fn get_low_frequency_amplitude(&self) -> f64 {
@@ -120,9 +117,10 @@ impl AudioSignalProcessor {
             .process_with_scratch(&mut window[..], &mut self.fft_compute_buffer[..]);
 
         FftResult::new(
-            window.into_iter().map(|bin| {
-                bin.norm_sqr() / FFT_SIZE.to_f64().unwrap_or(1.0).sqrt()
-            }).collect(),
+            window
+                .into_iter()
+                .map(|bin| bin.norm_sqr() / FFT_SIZE.to_f64().unwrap_or(1.0).sqrt())
+                .collect(),
         )
     }
 }
