@@ -5,54 +5,67 @@ use rustfft::{num_complex::Complex, num_traits::ToPrimitive};
 use std::sync::Arc;
 
 pub struct FftResult {
-    pub raw_bins: Vec<Complex<f64>>,
-    sample_rate: usize,
-    fft_size: usize,
+    pub raw_bins: Vec<f64>,
+    bin_size: usize,
 }
 
 impl FftResult {
-    pub fn new(raw_bins: Vec<Complex<f64>>) -> Self {
+    pub fn new(raw_bins: Vec<f64>) -> Self {
+        const SAMPLE_RATE: usize = 48000;
+        let bin_size = (SAMPLE_RATE / 2) / (raw_bins.len() / 2);
         Self {
             raw_bins,
-            sample_rate: 48000,
-            fft_size: 1024,
+            bin_size,
         }
-    }
-
-    pub fn get_frequency_bin(&self, frequency: usize) -> Option<f64> {
-        let bin_size = (self.sample_rate / 2) / (self.raw_bins.len() / 2);
-        let bin = self.raw_bins.get(frequency / bin_size)?;
-        Some(bin.norm_sqr() / self.fft_size.to_f64().unwrap_or(1.0))
     }
 
     pub fn get_low_frequency_amplitude(&self) -> f64 {
         let (min_freq, max_freq): (usize, usize) = (0, 100);
-        self.get_frequency_interval_average_amplitude(min_freq, max_freq)
+        self.get_frequency_interval_average_amplitude(&min_freq, &max_freq)
             .unwrap_or(0.0)
     }
 
     pub fn get_mid_frequency_amplitude(&self) -> f64 {
         let (min_freq, max_freq): (usize, usize) = (100, 1000);
-        self.get_frequency_interval_average_amplitude(min_freq, max_freq)
+        self.get_frequency_interval_average_amplitude(&min_freq, &max_freq)
             .unwrap_or(0.0)
     }
 
     pub fn get_high_frequency_amplitude(&self) -> f64 {
         let (min_freq, max_freq): (usize, usize) = (1000, 2000);
-        self.get_frequency_interval_average_amplitude(min_freq, max_freq)
+        self.get_frequency_interval_average_amplitude(&min_freq, &max_freq)
             .unwrap_or(0.0)
     }
 
     pub fn get_frequency_interval_average_amplitude(
         &self,
-        min_freq: usize,
-        max_freq: usize,
+        min_freq: &usize,
+        max_freq: &usize,
     ) -> Option<f64> {
-        let sum = (min_freq..max_freq)
-            .map(|frequency| self.get_frequency_bin(frequency).unwrap_or(0f64))
-            .reduce(|accumulator, frequency| accumulator + frequency)?;
+        let sum: f64 = (*min_freq..*max_freq)
+            .map(|frequency| self.get_frequency_amplitude(&frequency).unwrap_or(0.0))
+            .sum();
         let interval_size = (max_freq - min_freq).to_f64()?;
         Some(sum / interval_size)
+    }
+
+    // Computes the frequency amplitude using interpolation between 2 closest bins
+    fn get_frequency_amplitude(&self, frequency: &usize) -> Option<f64> {
+        let precise_index =
+            frequency.to_f64().unwrap_or(0.0) / self.bin_size.to_f64().unwrap_or(1.0);
+        let min_index = precise_index.floor().to_usize()?;
+        let max_index = precise_index.ceil().to_usize()?;
+        let position_between_bins = (frequency - self.get_bin_frequency_at_index(&min_index))
+            .to_f64()
+            .unwrap_or(0.0)
+            / self.bin_size.to_f64().unwrap_or(1.0);
+        let amplitude = self.raw_bins.get(min_index)? * position_between_bins
+            + self.raw_bins.get(max_index)? * (1.0 - position_between_bins);
+        Some(amplitude)
+    }
+
+    fn get_bin_frequency_at_index(&self, index: &usize) -> usize {
+        index * self.bin_size
     }
 }
 
@@ -106,6 +119,10 @@ impl AudioSignalProcessor {
         self.fft_plan
             .process_with_scratch(&mut window[..], &mut self.fft_compute_buffer[..]);
 
-        FftResult::new(window)
+        FftResult::new(
+            window.into_iter().map(|bin| {
+                bin.norm_sqr() / FFT_SIZE.to_f64().unwrap_or(1.0).sqrt()
+            }).collect(),
+        )
     }
 }
