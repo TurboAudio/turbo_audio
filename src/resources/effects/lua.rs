@@ -1,7 +1,9 @@
-use crate::{audio_processing::FftResult, resources::color::Color};
+use crate::{
+    audio_processing::AudioSignalProcessor, audio_processing::FftResult, resources::color::Color,
+};
 use jsonschema::JSONSchema;
 use mlua::{Error, Function, Lua, LuaSerdeExt, Table, Value};
-use std::fs;
+use std::{fs, sync::{Arc, RwLock}};
 
 #[derive(Debug)]
 pub enum InvalidEffectError {
@@ -37,9 +39,28 @@ pub struct LuaEffectSettings {
     pub settings: serde_json::Value,
 }
 
+struct LuaFftResult {
+    fft_result: Arc<RwLock<FftResult>>,
+}
+
+impl mlua::UserData for LuaFftResult {
+    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_method(
+            "get_frequency_interval_average",
+            |_, this, (low, high): (usize, usize)| {
+                Ok(this.fft_result.read().unwrap().get_frequency_interval_average(low, high))
+            },
+        );
+    }
+}
+
 impl LuaEffect {
-    pub fn new(filename: &str) -> Result<Self, LuaEffectLoadError> {
-        let (lua, json_schema, compiled_json_schema) = Self::get_lua_effect(filename)?;
+    pub fn new(
+        filename: &str,
+        audio_processor: &AudioSignalProcessor,
+    ) -> Result<Self, LuaEffectLoadError> {
+        let (lua, json_schema, compiled_json_schema) =
+            Self::get_lua_effect(filename, audio_processor)?;
         Ok(Self {
             lua,
             json_schema,
@@ -51,34 +72,11 @@ impl LuaEffect {
         &mut self,
         leds: &mut [Color],
         settings: &LuaEffectSettings,
-        fft_result: &FftResult,
     ) -> Result<(), LuaEffectRuntimeError> {
         self.lua
             .globals()
             .set("settings", self.lua.to_value(&settings.settings).unwrap())
             .map_err(LuaEffectRuntimeError::Lua)?;
-
-        self.lua
-            .globals()
-            .set(
-                "Low_Frequency_Amplitude",
-                fft_result.get_low_frequency_amplitude(),
-            )
-            .unwrap();
-        self.lua
-            .globals()
-            .set(
-                "Mid_Frequency_Amplitude",
-                fft_result.get_mid_frequency_amplitude(),
-            )
-            .unwrap();
-        self.lua
-            .globals()
-            .set(
-                "High_Frequency_Amplitude",
-                fft_result.get_high_frequency_amplitude(),
-            )
-            .unwrap();
 
         let resize_fn: Function = self
             .lua
@@ -135,13 +133,18 @@ impl LuaEffect {
         Ok(())
     }
 
-    fn get_lua_effect(filename: &str) -> Result<(Lua, String, JSONSchema), LuaEffectLoadError> {
+    fn get_lua_effect(
+        filename: &str,
+        audio_processor: &AudioSignalProcessor,
+    ) -> Result<(Lua, String, JSONSchema), LuaEffectLoadError> {
         let lua_src = fs::read_to_string(filename).map_err(LuaEffectLoadError::File)?;
         let lua = Lua::new();
         lua.load(&lua_src).exec().map_err(LuaEffectLoadError::Lua)?;
         let schema = Self::get_lua_schema(&lua)?;
         let compiled_schema = JSONSchema::compile(&schema)
             .map_err(|_| LuaEffectLoadError::Effect(InvalidEffectError::InvalidSchema))?;
+
+        lua.globals().set("Fft_Result", LuaFftResult{fft_result: audio_processor.fft_result.clone()}).unwrap();
 
         Ok((lua, schema.to_string(), compiled_schema))
     }

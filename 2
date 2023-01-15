@@ -4,14 +4,13 @@ use dasp_window::Window;
 use rustfft::{num_complex::Complex, num_traits::ToPrimitive};
 use std::sync::{Arc, RwLock};
 
-#[derive(Default)]
 pub struct FftResult {
     pub raw_bins: Vec<f32>,
 }
 
 const SAMPLE_RATE: usize = 48000;
 const FFT_SIZE: usize = 1024;
-const FFT_RESOLUTION: f32 = SAMPLE_RATE as f32 / FFT_SIZE as f32;
+const FFT_RESOLUTION: usize = SAMPLE_RATE / (FFT_SIZE / 2);
 
 impl FftResult {
     pub fn new(raw_bins: Vec<f32>) -> Self {
@@ -49,8 +48,8 @@ impl FftResult {
     }
 
     pub fn get_frequency_interval_average(&self, low: usize, high: usize) -> f32 {
-        let low_index = (low as f32 / FFT_RESOLUTION) as usize;
-        let high_index = std::cmp::min((high as f32 / FFT_RESOLUTION) as usize, self.raw_bins.len() - 1);
+        let low_index = low / FFT_RESOLUTION;
+        let high_index = std::cmp::min(high / FFT_RESOLUTION, self.raw_bins.len() - 1);
         if low_index >= high_index {
             return 0.0;
         }
@@ -74,7 +73,7 @@ impl FftResult {
     }
 
     fn get_bin_frequency_at_index(&self, index: &usize) -> usize {
-        (*index as f32 * FFT_RESOLUTION) as usize
+        index * FFT_RESOLUTION
     }
 }
 
@@ -98,7 +97,7 @@ impl AudioSignalProcessor {
             fft_compute_buffer: vec![Complex::<f32>::default(); FFT_SIZE],
             fft_plan: planner.plan_fft_forward(FFT_SIZE),
             fft_window_buffer: vec![],
-            fft_result: Arc::default(),
+            fft_result: Arc::new(RwLock::new(FftResult::new(vec![]))),
         }
     }
 
@@ -130,8 +129,7 @@ impl AudioSignalProcessor {
             &mut self.fft_compute_buffer,
         );
 
-
-        let mut fft_result_writeable = self.fft_result.write().unwrap();
+        let fft_result_writeable = self.fft_result.write().unwrap();
         fft_result_writeable.raw_bins = self
             .fft_window_buffer
             .iter()
