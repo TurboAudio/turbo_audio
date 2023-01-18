@@ -84,7 +84,7 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     effects.insert(20, Effect::Raindrop(raindrop));
     effect_settings.insert(20, 1);
 
-    let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
+    let lua_effect = LuaEffect::new("scripts/spectrogram.lua", &audio_processor).map_err(|e| {
         log::error!("{:?}", e);
         RunLoopError::LoadEffect
     })?;

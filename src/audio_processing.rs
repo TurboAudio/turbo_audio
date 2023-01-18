@@ -140,10 +140,14 @@ impl AudioSignalProcessor {
         self.fft_plan
             .process_with_scratch(&mut self.fft_window_buffer, &mut self.fft_compute_buffer);
 
-        self.fft_result.write().unwrap().raw_bins = self
-            .fft_window_buffer
-            .iter()
-            .map(|bin| bin.norm_sqr() / (self.fft_buffer_size as f32).sqrt())
-            .collect();
+        {
+            let mut fft_result = self.fft_result.write().unwrap();
+            fft_result.raw_bins.clear();
+            fft_result.raw_bins.extend(
+                self.fft_window_buffer
+                    .iter()
+                    .map(|bin| bin.norm_sqr() / (self.fft_buffer_size as f32).sqrt()),
+            );
+        }
     }
 }
