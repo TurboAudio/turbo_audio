@@ -19,14 +19,21 @@ use warp::{
     Filter,
 };
 
-type Users = Arc<RwLock<HashMap<usize, mpsc::UnboundedSender<Message>>>>;
+use crate::{resources::{effects::Effect, settings::Settings}, connections::Connection};
 type IdCounter = Arc<AtomicUsize>;
+type EffectMap = Arc<RwLock<HashMap<usize, Effect>>>;
+type SettingsMap = Arc<RwLock<HashMap<usize, Settings>>>;
+type ConnectionMap = Arc<RwLock<HashMap<usize, Connection>>>;
+type Users = Arc<RwLock<HashMap<usize, mpsc::UnboundedSender<Message>>>>;
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
-enum Resource {
-    Effect { id: usize, value: i32 },
-    Setting { id: usize, value: i32 },
+#[derive(Default, Clone)]
+pub struct ServerState {
+    pub id_counter: IdCounter,
+    pub effects: EffectMap,
+    pub settings: SettingsMap,
+    pub connections: ConnectionMap,
 }
+
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ResourceRequest {
@@ -34,29 +41,28 @@ struct ResourceRequest {
     value: i32,
 }
 
-type ResourceMap = Arc<RwLock<HashMap<usize, Resource>>>;
 
 pub struct WebSocketServer {
     users: Users,
+    state: ServerState,
     server_handle: Option<JoinHandle<()>>,
 }
 
 impl WebSocketServer {
-    pub fn new() -> WebSocketServer {
+    pub fn new(state: ServerState) -> WebSocketServer {
         WebSocketServer {
             users: Users::default(),
+            state,
             server_handle: None,
         }
     }
 
     pub fn start_server(&mut self, handle: tokio::runtime::Handle) {
-        let user_id_counter = IdCounter::default();
-        let resources = ResourceMap::default();
-        let resources_id_counter = IdCounter::default();
         let users = self.users.clone();
+        let id_counter = self.state.id_counter.clone();
         let websocket_route = warp::path("ws")
             .and(warp::ws())
-            .and(warp::any().map(move || user_id_counter.clone()))
+            .and(warp::any().map(move || id_counter.clone()))
             .and(warp::any().map(move || users.clone()))
             .map(
                 |ws: warp::ws::Ws, user_id_counter: IdCounter, users: Users| {
@@ -66,47 +72,53 @@ impl WebSocketServer {
                 },
             );
 
-        let get_resource_clone = resources.clone();
-        let effect_get = warp::get()
-            .and(warp::path("effects"))
-            .and(warp::path::param::<usize>())
-            .and(warp::any().map(move || get_resource_clone.clone()))
-            .and_then(|effect_id, resources: ResourceMap| async move {
-                match resources.read().await.get(&effect_id) {
-                    Some(value) => Ok(Response::builder()
-                        .body(serde_json::to_string(value).unwrap())
-                        .unwrap()),
-                    None => Err(warp::reject::not_found()),
-                }
-            });
+        // let effect_get = warp::get()
+        //     .and(warp::path("effects"))
+        //     .and(warp::path::param::<usize>())
+        //     .and(warp::any().map(move || self.state.effects.clone()))
+        //     .and_then(|effect_id, effects: EffectMap| async move {
+        //         match effects.read().await.get(&effect_id) {
+        //             Some(value) => {
+        //                 let body = match value {
+        //                     Effect::Lua(lua_effect) => Ok("Lua"),
+        //                     Effect::Moody(moody) => Ok("Moody"),
+        //                     Effect::Raindrop(raindrop) => Ok("Raindrop")
+        //                 };
+        //                 Ok(Response::builder()
+        //                 .body(body)
+        //                 .unwrap())
+        //             },
+        //             None => Err(warp::reject::not_found()),
+        //         }
+        //     });
 
-        let effect_post = warp::post()
-            .and(warp::path("effects"))
-            .and(warp::body::json())
-            .and(warp::any().map(move || resources.clone()))
-            .and(warp::any().map(move || resources_id_counter.clone()))
-            .and_then(
-                |request: ResourceRequest, resources: ResourceMap, id_counter: IdCounter| {
-                    async move {
-                        let new_resource_id = id_counter.fetch_add(1, Ordering::Relaxed);
-                        let new_resource = match &request.resource_type[..] {
-                            "Setting" => Resource::Setting {
-                                id: new_resource_id,
-                                value: request.value,
-                            },
-                            "Effect" => Resource::Setting {
-                                id: new_resource_id,
-                                value: request.value,
-                            },
-                            _ => return Err(warp::reject::not_found()),
-                        };
-
-                        resources.write().await.insert(new_resource_id, new_resource.clone());
-                        Ok(Response::builder().body(serde_json::to_string(&new_resource).unwrap()).unwrap())
-                    }
-                },
-            );
-        let api = websocket_route.or(effect_get).or(effect_post);
+        // let effect_post = warp::post()
+        //     .and(warp::path("effects"))
+        //     .and(warp::body::json())
+        //     .and(warp::any().map(move || resources.clone()))
+        //     .and(warp::any().map(move || resources_id_counter.clone()))
+        //     .and_then(
+        //         |request: ResourceRequest, resources: ResourceMap, id_counter: IdCounter| {
+        //             async move {
+        //                 let new_resource_id = id_counter.fetch_add(1, Ordering::Relaxed);
+        //                 let new_resource = match &request.resource_type[..] {
+        //                     "Setting" => Resource::Setting {
+        //                         id: new_resource_id,
+        //                         value: request.value,
+        //                     },
+        //                     "Effect" => Resource::Setting {
+        //                         id: new_resource_id,
+        //                         value: request.value,
+        //                     },
+        //                     _ => return Err(warp::reject::not_found()),
+        //                 };
+        //
+        //                 resources.write().await.insert(new_resource_id, new_resource.clone());
+        //                 Ok(Response::builder().body(serde_json::to_string(&new_resource).unwrap()).unwrap())
+        //             }
+        //         },
+        //     );
+        let api = websocket_route;
         self.server_handle = Some(handle.spawn(warp::serve(api).run(([127, 0, 0, 1], 9001))));
     }
 
