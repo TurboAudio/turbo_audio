@@ -18,6 +18,10 @@ impl FftResult {
         }
     }
 
+    pub fn get_max_frequency(&self) -> f32 {
+        self.get_bin_frequency_at_index(self.raw_bins.len() - 1)
+    }
+
     pub fn get_frequency_amplitude(&self, frequency: f32) -> Option<f32> {
         let lower_index = (frequency / self.fft_resolution) as usize;
         let upper_index = lower_index + 1;

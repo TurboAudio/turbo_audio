@@ -1,4 +1,4 @@
-require("scripts.framework")
+require("scripts.libs.framework")
 
 SettingsSchema = {
 	title = "TurboSettings",
@@ -21,11 +21,11 @@ SettingsSchema = {
 }
 
 -- Local state
-local tick_count = 0
+local tickCount = 0
 
 function Tick()
 	for index = 1, #Colors do
-		Colors[index].r = (tick_count + index) % 256
+		Colors[index].r = (tickCount + index) % 256
 	end
-	tick_count = (tick_count + 1) % 256
+	tickCount = (tickCount + 1) % 256
 end

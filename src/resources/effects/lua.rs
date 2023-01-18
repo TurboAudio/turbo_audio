@@ -76,6 +76,10 @@ impl mlua::UserData for LuaFftResult {
                 });
             Ok(result)
         });
+
+        methods.add_method("get_max_frequency", |_, this, _: ()| {
+            Ok(this.fft_result.read().unwrap().get_max_frequency())
+        });
     }
 }
 
