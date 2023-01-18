@@ -3,12 +3,12 @@
     "sample_rate": 48000,
     "connections": [
         {
-            "output_stream": "spotify",
+            "output_stream": "DigiHug USB Audio",
             "input_stream": "ALSA plug-in [turbo_audio]",
             "port_connections": "AllInOrder"
         },
         {
-            "output_stream": "Firefox",
+            "output_stream": "spotify",
             "input_stream": "ALSA plug-in [turbo_audio]",
             "port_connections": "AllInOrder"
         }

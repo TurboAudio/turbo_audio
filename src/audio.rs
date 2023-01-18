@@ -2,18 +2,17 @@ use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig};
 use retry::{delay::Exponential, retry_with_index};
-use std::sync::{self, mpsc::Receiver, mpsc::Sender};
+use ringbuf::{HeapConsumer, HeapProducer};
 
 pub fn start_audio_loop(
     device_name: Option<String>,
     use_jack: bool,
     sample_rate: u32,
-) -> anyhow::Result<(cpal::Stream, Receiver<i16>)> {
+) -> anyhow::Result<(cpal::Stream, HeapConsumer<f32>)> {
     let audio_device = get_audio_device(device_name, use_jack);
     let input_config = get_input_config(&audio_device, sample_rate);
     let sample_format = input_config.sample_format();
-    let config = input_config.into();
-
+    let config: StreamConfig = input_config.into();
     let max_retries: usize = 3;
     retry_with_index(
         Exponential::from_millis(250).take(max_retries),
@@ -74,7 +73,7 @@ fn get_input_config(audio_device: &Device, sample_rate: u32) -> SupportedStreamC
 fn build_audio_stream<T: cpal::Sample>(
     audio_device: &Device,
     config: &StreamConfig,
-    tx: Sender<i16>,
+    mut tx: HeapProducer<f32>,
 ) -> Result<cpal::Stream, cpal::BuildStreamError> {
     let err_fn = |err| {
         panic!("ERROR: {:?}", err);
@@ -84,7 +83,7 @@ fn build_audio_stream<T: cpal::Sample>(
         config,
         move |data: &[T], _: &InputCallbackInfo| {
             for point in data {
-                let _ = tx.send(point.to_i16());
+                let _ = tx.push(point.to_f32());
             }
         },
         err_fn,
@@ -95,8 +94,8 @@ fn start_stream(
     config: &StreamConfig,
     audio_device: &Device,
     sample_format: &SampleFormat,
-) -> Result<(cpal::Stream, Receiver<i16>), cpal::BuildStreamError> {
-    let (tx, rx) = sync::mpsc::channel();
+) -> Result<(cpal::Stream, HeapConsumer<f32>), cpal::BuildStreamError> {
+    let (tx, rx) = ringbuf::HeapRb::<f32>::new(1024).split();
     let stream = match sample_format {
         SampleFormat::U16 => build_audio_stream::<u16>(audio_device, config, tx),
         SampleFormat::I16 => build_audio_stream::<i16>(audio_device, config, tx),

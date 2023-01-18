@@ -7,7 +7,7 @@ use crate::pipewire_listener::{PortConnections, StreamConnections};
 pub struct TurboAudioConfig {
     pub device_name: Option<String>,
     pub jack: bool,
-    pub sample_rate: i64,
+    pub sample_rate: u32,
     pub stream_connections: Vec<StreamConnections>,
 }
 
@@ -95,7 +95,7 @@ impl TurboAudioConfig {
         Ok(TurboAudioConfig {
             device_name,
             jack,
-            sample_rate,
+            sample_rate: sample_rate as u32,
             stream_connections,
         })
     }

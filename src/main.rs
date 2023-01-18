@@ -1,8 +1,10 @@
 mod audio;
+mod audio_processing;
 mod config_parser;
 mod connections;
 mod pipewire_listener;
 mod resources;
+use audio_processing::AudioSignalProcessor;
 use resources::{
     color::Color,
     effects::{moody::update_moody, raindrop::update_raindrop},
@@ -46,7 +48,7 @@ enum RunLoopError {
     StartPipewireStream,
 }
 
-fn test_and_run_loop() -> Result<(), RunLoopError> {
+fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), RunLoopError> {
     let mut settings: HashMap<i32, Settings> = HashMap::default();
     let mut effects: HashMap<i32, Effect> = HashMap::default();
     let mut effect_settings: HashMap<i32, i32> = HashMap::default();
@@ -81,7 +83,7 @@ fn test_and_run_loop() -> Result<(), RunLoopError> {
     effects.insert(20, Effect::Raindrop(raindrop));
     effect_settings.insert(20, 1);
 
-    let lua_effect = LuaEffect::new("scripts/fade.lua").map_err(|e| {
+    let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
         log::error!("{:?}", e);
         RunLoopError::LoadEffect
     })?;
@@ -114,7 +116,9 @@ fn test_and_run_loop() -> Result<(), RunLoopError> {
             duration_per_tick.checked_sub(&lag).unwrap(),
         );
         std::thread::sleep(current_sleep_duration.to_std().unwrap());
+        audio_processor.compute_fft();
 
+        let _fft_result_read_lock = audio_processor.fft_result.read().unwrap();
         let _update_result =
             update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
@@ -183,7 +187,7 @@ fn send_ledstrip_colors(
                         log::error!("{:?}", error);
                         connections.remove(&connection_id);
                         ledstrip.connection_id = None;
-                    };
+                    }
                     return Ok(());
                 }
                 Connection::Usb(_terminal) => {
@@ -208,11 +212,10 @@ fn main() -> Result<(), RunLoopError> {
         RunLoopError::LoadConfigFile
     })?;
 
-    let (_stream, _rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())
-        .map_err(|e| {
-            log::error!("{:?}", e);
-            RunLoopError::StartAudioLoop
-        })?;
+    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
+        log::error!("{:?}", e);
+        RunLoopError::StartAudioLoop
+    })?;
     let pipewire_controller = PipewireController::new();
     pipewire_controller
         .set_stream_connections(stream_connections)
@@ -220,6 +223,10 @@ fn main() -> Result<(), RunLoopError> {
             log::error!("{:?}", e);
             RunLoopError::StartPipewireStream
         })?;
-    test_and_run_loop()?;
+
+    let fft_buffer_size: usize = 1024;
+    let audio_processor =
+        audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
+    test_and_run_loop(audio_processor)?;
     Ok(())
 }
