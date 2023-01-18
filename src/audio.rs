@@ -1,7 +1,7 @@
 use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait};
 use cpal::{
-    BufferSize, Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig,
+    Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig,
 };
 use retry::{delay::Exponential, retry_with_index};
 use ringbuf::{HeapConsumer, HeapProducer};
@@ -14,9 +14,7 @@ pub fn start_audio_loop(
     let audio_device = get_audio_device(device_name, use_jack);
     let input_config = get_input_config(&audio_device, sample_rate);
     let sample_format = input_config.sample_format();
-    let mut config: StreamConfig = input_config.into();
-    config.buffer_size = BufferSize::Fixed(512);
-
+    let config: StreamConfig = input_config.into();
     let max_retries: usize = 3;
     retry_with_index(
         Exponential::from_millis(250).take(max_retries),
