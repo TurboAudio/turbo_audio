@@ -3,7 +3,10 @@ use crate::{
 };
 use jsonschema::JSONSchema;
 use mlua::{Error, Function, Lua, LuaSerdeExt, Table, Value};
-use std::{fs, sync::{Arc, RwLock}};
+use std::{
+    fs,
+    sync::{Arc, RwLock},
+};
 
 #[derive(Debug)]
 pub enum InvalidEffectError {
@@ -46,11 +49,33 @@ struct LuaFftResult {
 impl mlua::UserData for LuaFftResult {
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_method(
-            "get_frequency_interval_average",
-            |_, this, (low, high): (usize, usize)| {
-                Ok(this.fft_result.read().unwrap().get_frequency_interval_average(low, high))
+            "get_average_amplitude",
+            |_, this, (lower_frequency, upper_frequency): (f32, f32)| {
+                let result = this
+                    .fft_result
+                    .read()
+                    .unwrap()
+                    .get_average_amplitude(lower_frequency, upper_frequency)
+                    .unwrap_or_else(|| {
+                        log::error!("Invalid frequencies: {lower_frequency} & {upper_frequency}");
+                        0.0f32
+                    });
+                Ok(result)
             },
         );
+
+        methods.add_method("get_frequency_amplitude", |_, this, frequency: f32| {
+            let result = this
+                .fft_result
+                .read()
+                .unwrap()
+                .get_frequency_amplitude(frequency)
+                .unwrap_or_else(|| {
+                    log::error!("Invalid frequency: {frequency}");
+                    0.0f32
+                });
+            Ok(result)
+        });
     }
 }
 
@@ -144,7 +169,14 @@ impl LuaEffect {
         let compiled_schema = JSONSchema::compile(&schema)
             .map_err(|_| LuaEffectLoadError::Effect(InvalidEffectError::InvalidSchema))?;
 
-        lua.globals().set("Fft_Result", LuaFftResult{fft_result: audio_processor.fft_result.clone()}).unwrap();
+        lua.globals()
+            .set(
+                "Fft_Result",
+                LuaFftResult {
+                    fft_result: audio_processor.fft_result.clone(),
+                },
+            )
+            .unwrap();
 
         Ok((lua, schema.to_string(), compiled_schema))
     }

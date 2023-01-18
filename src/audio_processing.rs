@@ -6,99 +6,110 @@ use std::sync::{Arc, RwLock};
 
 #[derive(Default)]
 pub struct FftResult {
-    pub raw_bins: Vec<f32>,
+    raw_bins: Vec<f32>,
+    fft_resolution: f32,
 }
 
-const SAMPLE_RATE: usize = 48000;
-const FFT_SIZE: usize = 1024;
-const FFT_RESOLUTION: f32 = SAMPLE_RATE as f32 / FFT_SIZE as f32;
-
 impl FftResult {
-    pub fn new(raw_bins: Vec<f32>) -> Self {
-        Self { raw_bins }
-    }
-
-    pub fn get_low_frequency_amplitude(&self) -> f32 {
-        let (min_freq, max_freq): (usize, usize) = (0, 100);
-        self.get_frequency_interval_average_amplitude(&min_freq, &max_freq)
-            .unwrap_or(0.0)
-    }
-
-    pub fn get_mid_frequency_amplitude(&self) -> f32 {
-        let (min_freq, max_freq): (usize, usize) = (100, 1000);
-        self.get_frequency_interval_average_amplitude(&min_freq, &max_freq)
-            .unwrap_or(0.0)
-    }
-
-    pub fn get_high_frequency_amplitude(&self) -> f32 {
-        let (min_freq, max_freq): (usize, usize) = (1000, 2000);
-        self.get_frequency_interval_average_amplitude(&min_freq, &max_freq)
-            .unwrap_or(0.0)
-    }
-
-    pub fn get_frequency_interval_average_amplitude(
-        &self,
-        min_freq: &usize,
-        max_freq: &usize,
-    ) -> Option<f32> {
-        let sum: f32 = (*min_freq..*max_freq)
-            .map(|frequency| self.get_frequency_amplitude(&frequency).unwrap_or(0.0))
-            .sum();
-        let interval_size = (max_freq - min_freq).to_f32()?;
-        Some(sum / interval_size)
-    }
-
-    pub fn get_frequency_interval_average(&self, low: usize, high: usize) -> f32 {
-        let low_index = (low as f32 / FFT_RESOLUTION) as usize;
-        let high_index = std::cmp::min((high as f32 / FFT_RESOLUTION) as usize, self.raw_bins.len() - 1);
-        if low_index >= high_index {
-            return 0.0;
+    pub fn new(raw_bins: Vec<f32>, fft_resolution: f32) -> Self {
+        Self {
+            raw_bins,
+            fft_resolution,
         }
-        let data = &self.raw_bins[low_index..=high_index];
-        data.iter().sum::<f32>() / (high_index - low_index) as f32
     }
 
-    // Computes the frequency amplitude using interpolation between 2 closest bins
-    fn get_frequency_amplitude(&self, frequency: &usize) -> Option<f32> {
-        let precise_index =
-            frequency.to_f32().unwrap_or(0.0) / FFT_RESOLUTION.to_f32().unwrap_or(1.0);
-        let min_index = precise_index.floor().to_usize()?;
-        let max_index = precise_index.ceil().to_usize()?;
-        let position_between_bins = (frequency - self.get_bin_frequency_at_index(&min_index))
-            .to_f32()
-            .unwrap_or(0.0)
-            / FFT_RESOLUTION.to_f32().unwrap_or(1.0);
-        let amplitude = self.raw_bins.get(min_index)? * position_between_bins
-            + self.raw_bins.get(max_index)? * (1.0 - position_between_bins);
-        Some(amplitude)
+    pub fn get_frequency_amplitude(&self, frequency: f32) -> Option<f32> {
+        let lower_index = (frequency / self.fft_resolution) as usize;
+        let upper_index = lower_index + 1;
+        let precise_index = frequency as f32 / self.fft_resolution;
+        Some(
+            self.raw_bins.get(lower_index)?
+                + (precise_index - lower_index as f32)
+                    * (self.raw_bins.get(upper_index)? - self.raw_bins.get(lower_index)?),
+        )
     }
 
-    fn get_bin_frequency_at_index(&self, index: &usize) -> usize {
-        (*index as f32 * FFT_RESOLUTION) as usize
+    pub fn get_average_amplitude(&self, lower_frequency: f32, upper_frequency: f32) -> Option<f32> {
+        Some(
+            self.get_area_under_curve(lower_frequency, upper_frequency)?
+                / (upper_frequency - lower_frequency),
+        )
+    }
+
+    fn get_area_under_curve(&self, lower_frequency: f32, upper_frequency: f32) -> Option<f32> {
+        if lower_frequency > upper_frequency {
+            return None;
+        }
+
+        let low_precise_index = lower_frequency / self.fft_resolution;
+        let low_known_index = low_precise_index as usize + 1;
+        let upper_precise_index = upper_frequency / self.fft_resolution;
+        let upper_known_index = upper_precise_index as usize;
+
+        if low_known_index > upper_known_index {
+            return Some(
+                (self.get_frequency_amplitude(lower_frequency)?
+                    + self.get_frequency_amplitude(upper_frequency)?)
+                    / 2.0f32
+                    * (upper_frequency - lower_frequency),
+            );
+        }
+
+        let lower_partial_area = (self.get_frequency_amplitude(lower_frequency)?
+            + self.raw_bins.get(low_known_index)?)
+            / 2.0f32
+            * (self.get_bin_frequency_at_index(low_known_index) - lower_frequency);
+
+        let upper_partial_area = (self.get_frequency_amplitude(upper_frequency)?
+            + self.raw_bins.get(upper_known_index)?)
+            / 2.0f32
+            * (upper_frequency - self.get_bin_frequency_at_index(upper_known_index));
+
+        let area_no_lerp = self.raw_bins[low_known_index..=upper_known_index]
+            .windows(2)
+            .map(|slice| (slice[0] + slice[1]) / 2.0f32 * self.fft_resolution)
+            .sum::<f32>();
+
+        Some(area_no_lerp + lower_partial_area + upper_partial_area)
+    }
+
+    fn get_bin_frequency_at_index(&self, index: usize) -> f32 {
+        index as f32 * self.fft_resolution
     }
 }
 
 pub struct AudioSignalProcessor {
-    audio_sample_buffer: dasp_ring_buffer::Fixed<[f32; FFT_SIZE]>,
+    audio_sample_buffer: dasp_ring_buffer::Fixed<Vec<f32>>,
     audio_sample_rx: ringbuf::HeapConsumer<f32>,
     tmp_vec: Vec<f32>,
     fft_plan: Arc<dyn rustfft::Fft<f32>>,
     fft_compute_buffer: Vec<Complex<f32>>,
     fft_window_buffer: Vec<Complex<f32>>,
+    sample_rate: u32,
+    fft_buffer_size: usize,
     pub fft_result: Arc<RwLock<FftResult>>,
 }
 
 impl AudioSignalProcessor {
-    pub fn new(audio_rx: ringbuf::HeapConsumer<f32>) -> Self {
+    pub fn new(
+        audio_rx: ringbuf::HeapConsumer<f32>,
+        sample_rate: u32,
+        fft_buffer_size: usize,
+    ) -> Self {
         let mut planner = rustfft::FftPlanner::new();
         Self {
-            audio_sample_buffer: dasp_ring_buffer::Fixed::from([0f32; FFT_SIZE]),
+            audio_sample_buffer: dasp_ring_buffer::Fixed::from(vec![0_f32; fft_buffer_size]),
             audio_sample_rx: audio_rx,
-            tmp_vec: vec![0f32; FFT_SIZE],
-            fft_compute_buffer: vec![Complex::<f32>::default(); FFT_SIZE],
-            fft_plan: planner.plan_fft_forward(FFT_SIZE),
+            tmp_vec: vec![0f32; fft_buffer_size],
+            fft_compute_buffer: vec![Complex::<f32>::default(); fft_buffer_size],
+            fft_plan: planner.plan_fft_forward(fft_buffer_size),
             fft_window_buffer: vec![],
-            fft_result: Arc::default(),
+            sample_rate,
+            fft_buffer_size,
+            fft_result: Arc::new(RwLock::new(FftResult::new(
+                vec![0.0f32; fft_buffer_size],
+                sample_rate as f32 / fft_buffer_size as f32,
+            ))),
         }
     }
 
@@ -114,10 +125,11 @@ impl AudioSignalProcessor {
                 .map(|e| e.to_sample::<f32>()),
         )
         .scale_amp(1.0)
-        .take(FFT_SIZE)
+        .take(self.fft_buffer_size)
         .enumerate()
         .map(|(index, value)| {
-            let hann_factor = dasp_window::Hanning::window(index as f32 / (FFT_SIZE as f32 - 1.0));
+            let hann_factor =
+                dasp_window::Hanning::window(index as f32 / (self.fft_buffer_size as f32 - 1.0));
             Complex::<f32> {
                 re: value * hann_factor,
                 im: 0.0,
@@ -125,17 +137,13 @@ impl AudioSignalProcessor {
         })
         .collect();
 
-        self.fft_plan.process_with_scratch(
-            &mut self.fft_window_buffer,
-            &mut self.fft_compute_buffer,
-        );
+        self.fft_plan
+            .process_with_scratch(&mut self.fft_window_buffer, &mut self.fft_compute_buffer);
 
-
-        let mut fft_result_writeable = self.fft_result.write().unwrap();
-        fft_result_writeable.raw_bins = self
+        self.fft_result.write().unwrap().raw_bins = self
             .fft_window_buffer
             .iter()
-            .map(|bin| bin.norm_sqr() / FFT_SIZE.to_f32().unwrap_or(1.0).sqrt())
+            .map(|bin| bin.norm_sqr() / (self.fft_buffer_size as f32).sqrt())
             .collect();
     }
 }

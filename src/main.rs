@@ -218,7 +218,7 @@ fn main() -> Result<(), RunLoopError> {
         RunLoopError::LoadConfigFile
     })?;
 
-    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate.try_into().unwrap())
+    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate)
         .map_err(|e| {
             log::error!("{:?}", e);
             RunLoopError::StartAudioLoop
@@ -231,7 +231,8 @@ fn main() -> Result<(), RunLoopError> {
             RunLoopError::StartPipewireStream
         })?;
 
-    let audio_processor = audio_processing::AudioSignalProcessor::new(audio_rx);
+    let fft_buffer_size: usize = 1024;
+    let audio_processor = audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
     test_and_run_loop(audio_processor)?;
     Ok(())
 }
