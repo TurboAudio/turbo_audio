@@ -1,8 +1,6 @@
 use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{
-    Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig,
-};
+use cpal::{Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig};
 use retry::{delay::Exponential, retry_with_index};
 use ringbuf::{HeapConsumer, HeapProducer};
 
