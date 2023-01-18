@@ -4,7 +4,7 @@ mod config_parser;
 mod connections;
 mod pipewire_listener;
 mod resources;
-use audio_processing::{AudioSignalProcessor, FftResult};
+use audio_processing::AudioSignalProcessor;
 use resources::{
     color::Color,
     effects::{moody::update_moody, raindrop::update_raindrop},
@@ -13,7 +13,6 @@ use resources::{
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddrV4},
-    sync::{RwLock, RwLockReadGuard},
 };
 
 use anyhow::anyhow;
@@ -84,7 +83,7 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     effects.insert(20, Effect::Raindrop(raindrop));
     effect_settings.insert(20, 1);
 
-    let lua_effect = LuaEffect::new("scripts/spectrogram.lua", &audio_processor).map_err(|e| {
+    let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
         log::error!("{:?}", e);
         RunLoopError::LoadEffect
     })?;
@@ -92,11 +91,11 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     effects.insert(30, Effect::Lua(lua_effect));
     effect_settings.insert(30, 2);
 
-    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42069));
+    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 200), 1234));
     let connection = TcpConnection::new(ip);
     let connection_id = 1;
     connections.insert(connection_id, Connection::Tcp(connection));
-    // connections.insert(2, Connection::Usb(UsbConnection {}));
+    connections.insert(2, Connection::Usb(UsbConnection {}));
 
     let mut ls1 = LedStrip::default();
     ls1.set_led_count(300);
@@ -119,13 +118,9 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
         std::thread::sleep(current_sleep_duration.to_std().unwrap());
         audio_processor.compute_fft();
 
-        let _update_result = update_ledstrips(
-            &mut ledstrips,
-            &mut effects,
-            &effect_settings,
-            &settings,
-            audio_processor.fft_result.read().unwrap(),
-        );
+        let _fft_result_read_lock = audio_processor.fft_result.read().unwrap();
+        let _update_result =
+            update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
@@ -137,7 +132,6 @@ fn update_ledstrips(
     effects: &mut HashMap<i32, Effect>,
     effect_settings: &HashMap<i32, i32>,
     settings: &HashMap<i32, Settings>,
-    fft_result: RwLockReadGuard<FftResult>,
 ) -> anyhow::Result<()> {
     for ledstrip in ledstrips {
         for (effect_id, interval) in &ledstrip.effects {
@@ -189,7 +183,7 @@ fn send_ledstrip_colors(
             match connection {
                 Connection::Tcp(tcp_connection) => {
                     // If send fails, connection is closed.
-                    if let Err(error) = tcp_connection.send_data(data.clone()) {
+                    if let Err(error) = tcp_connection.send_data(data) {
                         log::error!("{:?}", error);
                         connections.remove(&connection_id);
                         ledstrip.connection_id = None;
@@ -218,11 +212,10 @@ fn main() -> Result<(), RunLoopError> {
         RunLoopError::LoadConfigFile
     })?;
 
-    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate)
-        .map_err(|e| {
-            log::error!("{:?}", e);
-            RunLoopError::StartAudioLoop
-        })?;
+    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
+        log::error!("{:?}", e);
+        RunLoopError::StartAudioLoop
+    })?;
     let pipewire_controller = PipewireController::new();
     pipewire_controller
         .set_stream_connections(stream_connections)
@@ -232,7 +225,8 @@ fn main() -> Result<(), RunLoopError> {
         })?;
 
     let fft_buffer_size: usize = 1024;
-    let audio_processor = audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
+    let audio_processor =
+        audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
     test_and_run_loop(audio_processor)?;
     Ok(())
 }

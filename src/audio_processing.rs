@@ -1,7 +1,7 @@
 use dasp::Sample;
 use dasp_signal::Signal;
 use dasp_window::Window;
-use rustfft::{num_complex::Complex, num_traits::ToPrimitive};
+use rustfft::num_complex::Complex;
 use std::sync::{Arc, RwLock};
 
 #[derive(Default)]
@@ -85,7 +85,6 @@ pub struct AudioSignalProcessor {
     fft_plan: Arc<dyn rustfft::Fft<f32>>,
     fft_compute_buffer: Vec<Complex<f32>>,
     fft_window_buffer: Vec<Complex<f32>>,
-    sample_rate: u32,
     fft_buffer_size: usize,
     pub fft_result: Arc<RwLock<FftResult>>,
 }
@@ -104,7 +103,6 @@ impl AudioSignalProcessor {
             fft_compute_buffer: vec![Complex::<f32>::default(); fft_buffer_size],
             fft_plan: planner.plan_fft_forward(fft_buffer_size),
             fft_window_buffer: vec![],
-            sample_rate,
             fft_buffer_size,
             fft_result: Arc::new(RwLock::new(FftResult::new(
                 vec![0.0f32; fft_buffer_size],

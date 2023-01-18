@@ -6,6 +6,11 @@
             "output_stream": "DigiHug USB Audio",
             "input_stream": "ALSA plug-in [turbo_audio]",
             "port_connections": "AllInOrder"
+        },
+        {
+            "output_stream": "spotify",
+            "input_stream": "ALSA plug-in [turbo_audio]",
+            "port_connections": "AllInOrder"
         }
     ]
 }
