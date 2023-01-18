@@ -21,7 +21,7 @@ impl FftResult {
     pub fn get_frequency_amplitude(&self, frequency: f32) -> Option<f32> {
         let lower_index = (frequency / self.fft_resolution) as usize;
         let upper_index = lower_index + 1;
-        let precise_index = frequency as f32 / self.fft_resolution;
+        let precise_index = frequency / self.fft_resolution;
         Some(
             self.raw_bins.get(lower_index)?
                 + (precise_index - lower_index as f32)
