@@ -117,35 +117,36 @@ impl AudioSignalProcessor {
             self.audio_sample_buffer.push(*sample);
         });
 
-        self.fft_window_buffer = dasp_signal::from_iter(
-            self.audio_sample_buffer
-                .iter()
-                .map(|e| e.to_sample::<f32>()),
-        )
-        .scale_amp(1.0)
-        .take(self.fft_buffer_size)
-        .enumerate()
-        .map(|(index, value)| {
-            let hann_factor =
-                dasp_window::Hanning::window(index as f32 / (self.fft_buffer_size as f32 - 1.0));
-            Complex::<f32> {
-                re: value * hann_factor,
-                im: 0.0,
-            }
-        })
-        .collect();
+        self.fft_window_buffer.clear();
+        self.fft_window_buffer.extend(
+            dasp_signal::from_iter(
+                self.audio_sample_buffer
+                    .iter()
+                    .map(|e| e.to_sample::<f32>()),
+            )
+            .scale_amp(1.0)
+            .take(self.fft_buffer_size)
+            .enumerate()
+            .map(|(index, value)| {
+                let hann_factor = dasp_window::Hanning::window(
+                    index as f32 / (self.fft_buffer_size as f32 - 1.0),
+                );
+                Complex::<f32> {
+                    re: value * hann_factor,
+                    im: 0.0,
+                }
+            }),
+        );
 
         self.fft_plan
             .process_with_scratch(&mut self.fft_window_buffer, &mut self.fft_compute_buffer);
 
-        {
-            let mut fft_result = self.fft_result.write().unwrap();
-            fft_result.raw_bins.clear();
-            fft_result.raw_bins.extend(
-                self.fft_window_buffer
-                    .iter()
-                    .map(|bin| bin.norm_sqr() / (self.fft_buffer_size as f32).sqrt()),
-            );
-        }
+        let mut fft_result = self.fft_result.write().unwrap();
+        fft_result.raw_bins.clear();
+        fft_result.raw_bins.extend(
+            self.fft_window_buffer
+                .iter()
+                .map(|bin| bin.norm_sqr() / (self.fft_buffer_size as f32).sqrt()),
+        );
     }
 }
