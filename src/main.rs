@@ -2,8 +2,10 @@ mod audio;
 mod audio_processing;
 mod config_parser;
 mod connections;
+mod hot_reload;
 mod pipewire_listener;
 mod resources;
+
 use audio_processing::AudioSignalProcessor;
 use resources::{
     color::Color,
@@ -14,6 +16,7 @@ use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddrV4},
 };
+use hot_reload::start_hot_reload;
 
 use anyhow::anyhow;
 use audio::start_audio_loop;
@@ -91,7 +94,7 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     effects.insert(30, Effect::Lua(lua_effect));
     effect_settings.insert(30, 2);
 
-    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 200), 1234));
+    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42069));
     let connection = TcpConnection::new(ip);
     let connection_id = 1;
     connections.insert(connection_id, Connection::Tcp(connection));
@@ -102,6 +105,12 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     ls1.add_effect(30, 300);
     ls1.connection_id = Some(connection_id);
     ledstrips.push(ls1);
+
+    if let Err(e) = start_hot_reload() {
+        log::error!("Hot reload may not be active: {e:?}");
+    }
+
+    let (hot_reload_rx, _debouncer) = start_hot_reload().unwrap();
 
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
@@ -124,6 +133,11 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
+
+        if hot_reload_rx.try_recv().is_ok() {
+            log::info!("Restarting");
+            return Ok(());
+        }
     }
 }
 
@@ -201,32 +215,38 @@ fn send_ledstrip_colors(
 
 fn main() -> Result<(), RunLoopError> {
     pretty_env_logger::init();
-    let Args { settings_file } = Args::parse();
-    let TurboAudioConfig {
-        device_name,
-        jack,
-        sample_rate,
-        stream_connections,
-    } = TurboAudioConfig::new(&settings_file).map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::LoadConfigFile
-    })?;
-
-    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::StartAudioLoop
-    })?;
-    let pipewire_controller = PipewireController::new();
-    pipewire_controller
-        .set_stream_connections(stream_connections)
-        .map_err(|e| {
+    loop {
+        log::info!("patnais2");
+        let Args { settings_file } = Args::parse();
+        let TurboAudioConfig {
+            device_name,
+            jack,
+            sample_rate,
+            stream_connections,
+        } = TurboAudioConfig::new(&settings_file).map_err(|e| {
             log::error!("{:?}", e);
-            RunLoopError::StartPipewireStream
+            RunLoopError::LoadConfigFile
         })?;
 
-    let fft_buffer_size: usize = 1024;
-    let audio_processor =
-        audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
-    test_and_run_loop(audio_processor)?;
-    Ok(())
+        let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
+            log::error!("{:?}", e);
+            RunLoopError::StartAudioLoop
+        })?;
+        log::info!("a");
+        let pipewire_controller = PipewireController::new();
+        pipewire_controller
+            .set_stream_connections(stream_connections)
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::StartPipewireStream
+            })?;
+
+        log::info!("b");
+        let fft_buffer_size: usize = 1024;
+        let audio_processor =
+            audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
+        log::info!("c");
+        test_and_run_loop(audio_processor)?;
+        log::info!("patnais");
+    }
 }

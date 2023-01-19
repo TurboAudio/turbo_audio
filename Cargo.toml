@@ -18,13 +18,14 @@ dasp_window = { version = "0.11.0", features = ["hanning"]}
 jsonschema = "0.16.1"
 log = "0.4.17"
 mlua = { version = "0.8.6", features = ["luajit52", "vendored", "async", "send", "serialize"] }
+# notify = { version = "5.0.0", default-features=false, features = ["serde"] }
+notify-debouncer-mini = { version = "0.2.1" }
 pipewire = "0.5.0"
 pretty_env_logger = "0.4.0"
 rand = "0.8"
 retry = "2.0.0"
 ring-channel = "0.11.0"
-rustfft = "6.1.0"
 ringbuf = "0.3.1"
+rustfft = "6.1.0"
 serde = {version = "1.0.150", features = ["derive"]}
 serde_json = "1.0.89"
-
