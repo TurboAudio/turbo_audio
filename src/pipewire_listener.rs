@@ -201,7 +201,7 @@ fn pipewire_thread(
         move |new_stream_connections| {
             let state = state.lock().unwrap();
             *stream_connections.borrow_mut() = new_stream_connections;
-            for link in state.links.values().clone() {
+            for link in state.links.values() {
                 check_remove_link(&state, &registry, link, &stream_connections.borrow_mut())
                     .unwrap_or_else(|err| log::error!("{}", err));
             }
@@ -459,7 +459,7 @@ impl PipewireState {
         let pipewire_object_type = self
             .id_types
             .remove(&id)
-            .with_context(|| format!("Couldn't remove object with id #{}", id))?;
+            .with_context(|| format!("Couldn't remove object with id #{id}"))?;
         match pipewire_object_type {
             PipewireObjectType::Node => self.remove_node(id),
             PipewireObjectType::Port => self.remove_port(id),
@@ -471,10 +471,11 @@ impl PipewireState {
         let node = self
             .nodes
             .remove(&id)
-            .with_context(|| format!("Node with id {} doesn't exist", id))?;
-        let ids = self.node_name_to_ids.get_mut(&node.name).with_context(|| {
-            format!("Error while removing node #{}, id not mapped to a name", id)
-        })?;
+            .with_context(|| format!("Node with id {id} doesn't exist"))?;
+        let ids = self
+            .node_name_to_ids
+            .get_mut(&node.name)
+            .with_context(|| format!("Error while removing node #{id}, id not mapped to a name"))?;
         ensure!(
             ids.remove(&id),
             "Error while removing node #{}, id not mapped to a name",
@@ -490,7 +491,7 @@ impl PipewireState {
         let port = self
             .ports
             .remove(&id)
-            .with_context(|| format!("Error removing port #{}, port doesn't exist", id))?;
+            .with_context(|| format!("Error removing port #{id}, port doesn't exist"))?;
 
         let parent_node = self.nodes.get_mut(&port.node_id).with_context(|| {
             format!(
@@ -528,10 +529,7 @@ impl PipewireState {
             port_id: &u32,
         ) -> Result<()> {
             let port = state.ports.get_mut(port_id).with_context(|| {
-                format!(
-                    "Error while removing link #{}, input port #{} doesn't exist",
-                    link_id, port_id
-                )
+                format!("Error while removing link #{link_id}, input port #{port_id} doesn't exist")
             })?;
             ensure!(
                 port.links.remove(link_id),
@@ -545,7 +543,7 @@ impl PipewireState {
         let link = self
             .links
             .remove(&id)
-            .with_context(|| format!("Error while removing link #{}, link doesn't exist", id))?;
+            .with_context(|| format!("Error while removing link #{id}, link doesn't exist"))?;
 
         remove_link_from_port(self, &id, &link.input_port_id)?;
         remove_link_from_port(self, &id, &link.output_port_id)?;
@@ -554,10 +552,7 @@ impl PipewireState {
             .output_to_input_port_links
             .get_mut(&link.output_port_id)
             .with_context(|| {
-                format!(
-                    "Error while removing link #{}, link representation not present",
-                    id
-                )
+                format!("Error while removing link #{id}, link representation not present")
             })?;
 
         ensure!(

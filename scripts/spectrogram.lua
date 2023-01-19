@@ -10,7 +10,7 @@ function Tick()
 	tick = tick + 1
 	for i = 0, #Colors - 1 do
 		local step = view / #Colors
-		local value = math.min(Fft_Result:get_frequency_amplitude(i * step, i * step + step) * 5, 255)
+		local value = math.min(Fft_Result:get_frequency_amplitude(i * step) * 5, 255)
 		local hue = (i + tick) % #Colors / #Colors
 		local r, g, b = HsvToRgb(hue, 1, 1)
 		Colors[i + 1].r = r / 255 * value
