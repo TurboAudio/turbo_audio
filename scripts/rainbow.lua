@@ -3,7 +3,7 @@ require("scripts.libs.colors")
 
 SettingsSchema = {}
 
-local tick = 0;
+local tick = 0
 
 function Tick()
 	for index = 0, #Colors - 1 do
@@ -14,5 +14,5 @@ function Tick()
 		Colors[index + 1].b = b
 	end
 
-    tick = tick + 1
+	tick = tick + 1
 end
