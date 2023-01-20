@@ -76,7 +76,7 @@ fn build_audio_stream<T: cpal::Sample>(
     mut tx: HeapProducer<f32>,
 ) -> Result<cpal::Stream, cpal::BuildStreamError> {
     let err_fn = |err| {
-        panic!("ERROR: {:?}", err);
+        panic!("ERROR: {err:?}");
     };
 
     audio_device.build_input_stream(
