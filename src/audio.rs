@@ -54,7 +54,7 @@ fn get_audio_device(device_name: Option<String>, use_jack: bool) -> Device {
             .devices()
             .expect("Host has no audio device")
             .find(|device| device.name().unwrap() == device_name)
-            .unwrap_or_else(|| panic!("No suitable audio device found with name {}", &device_name)),
+            .unwrap_or_else(|| panic!("No suitable audio device found with name {device_name}")),
         None => host
             .default_input_device()
             .expect("No default audio input found"),
