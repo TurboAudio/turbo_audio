@@ -2,18 +2,15 @@ mod audio;
 mod audio_processing;
 mod config_parser;
 mod connections;
+mod controller;
 mod hot_reload;
 mod pipewire_listener;
 mod resources;
-mod controller;
 
 use audio_processing::AudioSignalProcessor;
 use controller::Controller;
 use hot_reload::{check_lua_files_changed, start_hot_reload_lua_effects};
-use resources::{
-    color::Color,
-    ledstrip::LedStrip,
-};
+use resources::{color::Color, ledstrip::LedStrip};
 use std::net::{Ipv4Addr, SocketAddrV4};
 
 use audio::start_audio_loop;
@@ -108,7 +105,6 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
         log::error!("Hot reload may not be active: {e:?}");
     }
     let (hot_reload_rx, _debouncer) = start_hot_reload_lua_effects().unwrap();
-
 
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
