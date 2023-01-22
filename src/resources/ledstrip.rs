@@ -6,8 +6,8 @@ pub type EffectInterval = (usize, usize);
 pub struct LedStrip {
     pub size: usize,
     pub colors: Vec<Color>,
-    pub effects: Vec<(i32, EffectInterval)>,
-    pub connection_id: Option<i32>,
+    pub effects: Vec<(usize, EffectInterval)>,
+    pub connection_id: Option<usize>,
     used_led_count: usize,
 }
 
@@ -25,7 +25,7 @@ impl LedStrip {
         self.colors.resize(size, Color::new());
     }
 
-    pub fn add_effect(&mut self, effect_id: i32, size: usize) -> bool {
+    pub fn add_effect(&mut self, effect_id: usize, size: usize) -> bool {
         if self.used_led_count + size > self.size {
             return false;
         }

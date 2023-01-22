@@ -9,7 +9,6 @@ pub struct RaindropSettings {
 
 #[derive(Debug)]
 pub struct Raindrops {
-    pub id: i32,
     pub state: RaindropState,
 }
 

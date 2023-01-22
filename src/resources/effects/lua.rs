@@ -32,6 +32,7 @@ pub enum LuaEffectRuntimeError {
 #[allow(unused)]
 #[derive(Debug)]
 pub struct LuaEffect {
+    filename: String,
     lua: Lua,
     json_schema: String,
     compiled_json_schema: JSONSchema,
@@ -91,10 +92,15 @@ impl LuaEffect {
         let (lua, json_schema, compiled_json_schema) =
             Self::get_lua_effect(filename, audio_processor)?;
         Ok(Self {
+            filename: filename.to_string(),
             lua,
             json_schema,
             compiled_json_schema,
         })
+    }
+
+    pub fn get_filename(&self) -> &str {
+        &self.filename
     }
 
     pub fn tick(
