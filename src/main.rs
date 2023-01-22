@@ -123,7 +123,7 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
 
         let _fft_result_read_lock = audio_processor.fft_result.read().unwrap();
         controller.update_led_strips();
-        let _ = controller.send_ledstrip_colors();
+        controller.send_ledstrip_colors();
 
         check_lua_files_changed(
             &hot_reload_rx,

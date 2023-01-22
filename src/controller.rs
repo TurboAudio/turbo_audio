@@ -101,7 +101,7 @@ impl Controller {
             }
         }
     }
-    pub fn send_ledstrip_colors(&mut self) -> anyhow::Result<()> {
+    pub fn send_ledstrip_colors(&mut self) {
         self.led_strip_connections
             .retain(|ledstrip_id, connection_id| {
                 if let Some(ledstrip) = self.led_strips.get(ledstrip_id) {
@@ -129,6 +129,5 @@ impl Controller {
                 }
                 false
             });
-        Ok(())
     }
 }
