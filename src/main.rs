@@ -91,6 +91,7 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     controller.link_effect_to_settings(raindrop_id, raindrop_settings_id);
 
     let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 10), 1234));
+    // let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42069));
     let connection = TcpConnection::new(ip);
     let connection_id = 1;
     controller.add_connection(connection_id, Connection::Tcp(connection));

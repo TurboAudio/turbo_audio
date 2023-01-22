@@ -86,13 +86,13 @@ impl Controller {
                 let setting = self.settings.get(setting_id);
                 match (effect, setting) {
                     (Effect::Moody(_moody), Some(Settings::Moody(settings))) => {
-                        update_moody(leds, &settings);
+                        update_moody(leds, settings);
                     }
                     (Effect::Raindrop(raindrop), Some(Settings::Raindrop(settings))) => {
-                        update_raindrop(leds, &settings, &mut raindrop.state);
+                        update_raindrop(leds, settings, &mut raindrop.state);
                     }
                     (Effect::Lua(lua), Some(Settings::Lua(settings))) => {
-                        if let Err(e) = lua.tick(leds, &settings) {
+                        if let Err(e) = lua.tick(leds, settings) {
                             log::error!("Error when executing lua function: {:?}", e);
                         }
                     }
@@ -101,39 +101,34 @@ impl Controller {
             }
         }
     }
-    pub fn send_ledstrip_colors(
-        &mut self,
-        // ledstrips: &mut Vec<LedStrip>,
-        // connections: &mut HashMap<usize, Connection>,
-        // ledstrip_connections: &mut HashMap<usize, usize>,
-        // ledstrip_id: usize,
-    ) -> anyhow::Result<()> {
-        self.led_strip_connections.retain(|ledstrip_id, connection_id| {
-            if let Some(ledstrip) = self.led_strips.get(ledstrip_id) {
-                if let Some(connection) = self.connections.get_mut(connection_id) {
-                    let data = ledstrip
-                        .colors
-                        .iter()
-                        .flat_map(|color| color.to_bytes())
-                        .collect::<Vec<_>>();
-                    match connection {
-                        Connection::Tcp(tcp_connection) => {
-                            // If send fails, connection is closed.
-                            if let Err(error) = tcp_connection.send_data(data) {
-                                log::error!("{:?}", error);
-                                self.connections.remove(connection_id);
-                                return false;
+    pub fn send_ledstrip_colors(&mut self) -> anyhow::Result<()> {
+        self.led_strip_connections
+            .retain(|ledstrip_id, connection_id| {
+                if let Some(ledstrip) = self.led_strips.get(ledstrip_id) {
+                    if let Some(connection) = self.connections.get_mut(connection_id) {
+                        let data = ledstrip
+                            .colors
+                            .iter()
+                            .flat_map(|color| color.to_bytes())
+                            .collect::<Vec<_>>();
+                        match connection {
+                            Connection::Tcp(tcp_connection) => {
+                                // If send fails, connection is closed.
+                                if let Err(error) = tcp_connection.send_data(data) {
+                                    log::error!("{:?}", error);
+                                    self.connections.remove(connection_id);
+                                    return false;
+                                }
+                            }
+                            Connection::Usb(_terminal) => {
+                                todo!("Implement Usb connection");
                             }
                         }
-                        Connection::Usb(_terminal) => {
-                            todo!("Implement Usb connection");
-                        }
+                        return true;
                     }
-                    return true;
                 }
-            }
-            false
-        });
+                false
+            });
         Ok(())
     }
 }
