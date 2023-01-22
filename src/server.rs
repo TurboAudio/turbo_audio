@@ -49,7 +49,7 @@ impl Server {
                         ServerEvent::Pipi()
                     } else {
                         i += 1;
-                        ServerEvent::NewEffect(i, Effect::Moody(Moody { id: i as i32}))
+                        ServerEvent::NewEffect(i, Effect::Moody(Moody {}))
                     }
                 };
 

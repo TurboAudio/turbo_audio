@@ -2,22 +2,22 @@ mod audio;
 mod audio_processing;
 mod config_parser;
 mod connections;
+mod controller;
+mod hot_reload;
 mod pipewire_listener;
 mod resources;
 mod server;
 use audio_processing::AudioSignalProcessor;
-use resources::{
-    color::Color,
-    effects::{moody::update_moody, raindrop::update_raindrop},
-    ledstrip::LedStrip,
-};
+use resources::{color::Color, ledstrip::LedStrip};
 use server::{Server, ServerEvent};
 use std::{
-    collections::HashMap,
-    net::{Ipv4Addr, SocketAddrV4}, sync::mpsc::Receiver,
+    net::{Ipv4Addr, SocketAddrV4},
+    sync::mpsc::Receiver,
 };
 
-use anyhow::anyhow;
+use controller::Controller;
+use hot_reload::{check_lua_files_changed, start_hot_reload_lua_effects};
+
 use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
@@ -50,60 +50,69 @@ enum RunLoopError {
     StartPipewireStream,
 }
 
-fn test_and_run_loop(mut audio_processor: AudioSignalProcessor, server_events: Receiver<ServerEvent>) -> Result<(), RunLoopError> {
-    let mut settings: HashMap<i32, Settings> = HashMap::default();
-    let mut effects: HashMap<i32, Effect> = HashMap::default();
-    let mut effect_settings: HashMap<i32, i32> = HashMap::default();
-    let mut connections: HashMap<i32, Connection> = HashMap::default();
-    let mut ledstrips = Vec::default();
+fn test_and_run_loop(
+    mut audio_processor: AudioSignalProcessor,
+    server_events: Receiver<ServerEvent>,
+) -> Result<(), RunLoopError> {
+    let mut controller = Controller::new();
 
-    let moody_settings = MoodySettings {
-        color: Color { r: 255, g: 0, b: 0 },
-    };
-    let raindrop_settings = RaindropSettings {
-        rain_speed: 1,
-        drop_rate: 0.10,
-    };
+    let lua_id: usize = 1;
+    let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
+        log::error!("{:?}", e);
+        RunLoopError::LoadEffect
+    })?;
+    let lua_setting_id: usize = 1;
     let lua_settings = LuaEffectSettings {
         settings: serde_json::json!({
             "enable_beep_boops": true,
             "intensity": 11,
         }),
     };
-    settings.insert(0, Settings::Moody(moody_settings));
-    settings.insert(1, Settings::Raindrop(raindrop_settings));
-    settings.insert(2, Settings::Lua(lua_settings));
+    controller.add_effect(lua_id, Effect::Lua(lua_effect));
+    controller.add_settings(lua_setting_id, Settings::Lua(lua_settings));
+    controller.link_effect_to_settings(lua_id, lua_setting_id);
 
-    let moody = Moody { id: 10 };
-    effects.insert(10, Effect::Moody(moody));
-    effect_settings.insert(10, 0);
+    let moody_id: usize = 2;
+    let moody = Moody {};
+    let moody_settings_id: usize = 2;
+    let moody_settings = MoodySettings {
+        color: Color { r: 255, g: 0, b: 0 },
+    };
+    controller.add_settings(moody_settings_id, Settings::Moody(moody_settings));
+    controller.add_effect(moody_id, Effect::Moody(moody));
+    controller.link_effect_to_settings(moody_id, moody_settings_id);
 
+    let raindrop_id: usize = 3;
     let raindrop = Raindrops {
-        id: 20,
         state: RaindropState { riples: vec![] },
     };
-    effects.insert(20, Effect::Raindrop(raindrop));
-    effect_settings.insert(20, 1);
+    let raindrop_settings_id = 3;
+    let raindrop_settings = RaindropSettings {
+        rain_speed: 1,
+        drop_rate: 0.10,
+    };
+    controller.add_settings(raindrop_settings_id, Settings::Raindrop(raindrop_settings));
+    controller.add_effect(raindrop_id, Effect::Raindrop(raindrop));
+    controller.link_effect_to_settings(raindrop_id, raindrop_settings_id);
 
-    let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::LoadEffect
-    })?;
-
-    effects.insert(30, Effect::Lua(lua_effect));
-    effect_settings.insert(30, 2);
-
-    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 200), 1234));
+    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 10), 1234));
+    // let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42069));
     let connection = TcpConnection::new(ip);
     let connection_id = 1;
-    connections.insert(connection_id, Connection::Tcp(connection));
-    connections.insert(2, Connection::Usb(UsbConnection {}));
+    controller.add_connection(connection_id, Connection::Tcp(connection));
+    controller.add_connection(2, Connection::Usb(UsbConnection {}));
 
     let mut ls1 = LedStrip::default();
+    let led_strip_id: usize = 1;
     ls1.set_led_count(300);
-    ls1.add_effect(30, 300);
-    ls1.connection_id = Some(connection_id);
-    ledstrips.push(ls1);
+    ls1.add_effect(lua_id, 300);
+    controller.add_led_strip(led_strip_id, ls1);
+    controller.link_led_strip_to_connection(led_strip_id, connection_id);
+
+    if let Err(e) = start_hot_reload_lua_effects() {
+        log::error!("Hot reload may not be active: {e:?}");
+    }
+    let (hot_reload_rx, _debouncer) = start_hot_reload_lua_effects().unwrap();
 
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
@@ -121,92 +130,27 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor, server_events: R
         audio_processor.compute_fft();
 
         let _fft_result_read_lock = audio_processor.fft_result.read().unwrap();
-        let _update_result =
-            update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
-        let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
+        controller.update_led_strips();
+        controller.send_ledstrip_colors();
+
+        check_lua_files_changed(
+            &hot_reload_rx,
+            &mut controller.effects,
+            &controller.lua_effects_registry,
+            &audio_processor,
+        );
 
         for event in server_events.try_iter() {
             match event {
-                ServerEvent::NewEffect(id, effect) => log::trace!("New effect received from server: {id} -- {effect:?}"),
+                ServerEvent::NewEffect(id, effect) => {
+                    log::trace!("New effect received from server: {id} -- {effect:?}")
+                }
                 ServerEvent::Pipi() => log::trace!("Pipi event received from server"),
             }
-
         }
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
     }
-}
-
-fn update_ledstrips(
-    ledstrips: &mut [LedStrip],
-    effects: &mut HashMap<i32, Effect>,
-    effect_settings: &HashMap<i32, i32>,
-    settings: &HashMap<i32, Settings>,
-) -> anyhow::Result<()> {
-    for ledstrip in ledstrips {
-        for (effect_id, interval) in &ledstrip.effects {
-            let leds = ledstrip
-                .colors
-                .get_mut(interval.0..=interval.1)
-                .ok_or_else(|| anyhow!("Ledstrip interval out of bounds"))?;
-            let effect = effects
-                .get_mut(effect_id)
-                .ok_or_else(|| anyhow!("Effect id was not found."))?;
-            let setting_id = effect_settings
-                .get(effect_id)
-                .ok_or_else(|| anyhow!("Setting id not found"))?;
-            let setting = settings.get(setting_id);
-            match (effect, setting) {
-                (Effect::Moody(_moody), Some(Settings::Moody(settings))) => {
-                    update_moody(leds, settings);
-                }
-                (Effect::Raindrop(raindrop), Some(Settings::Raindrop(settings))) => {
-                    update_raindrop(leds, settings, &mut raindrop.state);
-                }
-                (Effect::Lua(lua), Some(Settings::Lua(settings))) => {
-                    if let Err(e) = lua.tick(leds, settings) {
-                        log::error!("Error when executing lua function: {:?}", e);
-                    }
-                }
-                _ => panic!("Effect doesn't match settings"),
-            }
-        }
-    }
-    Ok(())
-}
-
-fn send_ledstrip_colors(
-    ledstrips: &mut Vec<LedStrip>,
-    connections: &mut HashMap<i32, Connection>,
-) -> anyhow::Result<()> {
-    for ledstrip in ledstrips {
-        if let Some(connection_id) = ledstrip.connection_id {
-            let connection = connections
-                .get_mut(&connection_id)
-                .ok_or_else(|| anyhow!("Connection id \"{}\" doesn't exist", connection_id))?;
-
-            let data = ledstrip
-                .colors
-                .iter()
-                .flat_map(|color| color.to_bytes())
-                .collect::<Vec<_>>();
-            match connection {
-                Connection::Tcp(tcp_connection) => {
-                    // If send fails, connection is closed.
-                    if let Err(error) = tcp_connection.send_data(data) {
-                        log::error!("{:?}", error);
-                        connections.remove(&connection_id);
-                        ledstrip.connection_id = None;
-                    }
-                    return Ok(());
-                }
-                Connection::Usb(_terminal) => {
-                    todo!("Implement Usb connection");
-                }
-            }
-        }
-    }
-    Ok(())
 }
 
 fn main() -> Result<(), RunLoopError> {
