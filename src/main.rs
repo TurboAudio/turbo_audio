@@ -7,6 +7,7 @@ mod pipewire_listener;
 mod resources;
 
 use audio_processing::AudioSignalProcessor;
+use hot_reload::{check_lua_files_changed, start_hot_reload_lua_effects};
 use resources::{
     color::Color,
     effects::{moody::update_moody, raindrop::update_raindrop},
@@ -16,7 +17,6 @@ use std::{
     collections::HashMap,
     net::{Ipv4Addr, SocketAddrV4},
 };
-use hot_reload::start_hot_reload;
 
 use anyhow::anyhow;
 use audio::start_audio_loop;
@@ -51,12 +51,30 @@ enum RunLoopError {
     StartPipewireStream,
 }
 
+fn get_id<T>(object: &T) -> usize {
+    object as *const _ as usize
+}
+
+fn register_effect(
+    effect: Effect,
+    effects: &mut HashMap<usize, Effect>,
+    lua_effect_registry: &mut HashMap<String, usize>,
+) -> usize {
+    let id = get_id(&effect);
+    if let Effect::Lua(lua_effect) = &effect {
+        lua_effect_registry.insert(lua_effect.get_filename().to_owned(), id);
+    }
+    effects.insert(id, effect);
+    id
+}
+
 fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), RunLoopError> {
-    let mut settings: HashMap<i32, Settings> = HashMap::default();
-    let mut effects: HashMap<i32, Effect> = HashMap::default();
-    let mut effect_settings: HashMap<i32, i32> = HashMap::default();
-    let mut connections: HashMap<i32, Connection> = HashMap::default();
-    let mut ledstrips = Vec::default();
+    let mut settings: HashMap<usize, Settings> = HashMap::new();
+    let mut effects: HashMap<usize, Effect> = HashMap::new();
+    let mut effect_settings: HashMap<usize, usize> = HashMap::new();
+    let mut connections: HashMap<usize, Connection> = HashMap::new();
+    let mut ledstrips = Vec::new();
+    let mut lua_effects_registry: HashMap<String, usize> = HashMap::default();
 
     let moody_settings = MoodySettings {
         color: Color { r: 255, g: 0, b: 0 },
@@ -75,24 +93,35 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     settings.insert(1, Settings::Raindrop(raindrop_settings));
     settings.insert(2, Settings::Lua(lua_settings));
 
-    let moody = Moody { id: 10 };
-    effects.insert(10, Effect::Moody(moody));
-    effect_settings.insert(10, 0);
+    let moody = Moody {};
+    let moody_id = register_effect(
+        Effect::Moody(moody),
+        &mut effects,
+        &mut lua_effects_registry,
+    );
+    effect_settings.insert(moody_id, 0);
 
     let raindrop = Raindrops {
-        id: 20,
         state: RaindropState { riples: vec![] },
     };
-    effects.insert(20, Effect::Raindrop(raindrop));
-    effect_settings.insert(20, 1);
+    let raindrops_id = register_effect(
+        Effect::Raindrop(raindrop),
+        &mut effects,
+        &mut lua_effects_registry,
+    );
+    effect_settings.insert(raindrops_id, 1);
 
     let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
         log::error!("{:?}", e);
         RunLoopError::LoadEffect
     })?;
 
-    effects.insert(30, Effect::Lua(lua_effect));
-    effect_settings.insert(30, 2);
+    let lua_id = register_effect(
+        Effect::Lua(lua_effect),
+        &mut effects,
+        &mut lua_effects_registry,
+    );
+    effect_settings.insert(lua_id, 2);
 
     let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42069));
     let connection = TcpConnection::new(ip);
@@ -102,15 +131,15 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
 
     let mut ls1 = LedStrip::default();
     ls1.set_led_count(300);
-    ls1.add_effect(30, 300);
+    ls1.add_effect(lua_id, 300);
     ls1.connection_id = Some(connection_id);
     ledstrips.push(ls1);
 
-    if let Err(e) = start_hot_reload() {
+    if let Err(e) = start_hot_reload_lua_effects() {
         log::error!("Hot reload may not be active: {e:?}");
     }
 
-    let (hot_reload_rx, _debouncer) = start_hot_reload().unwrap();
+    let (hot_reload_rx, _debouncer) = start_hot_reload_lua_effects().unwrap();
 
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
@@ -132,20 +161,22 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
             update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
 
-        lag = lag.checked_sub(&duration_per_tick).unwrap();
+        check_lua_files_changed(
+            &hot_reload_rx,
+            &mut effects,
+            &lua_effects_registry,
+            &audio_processor,
+        );
 
-        if hot_reload_rx.try_recv().is_ok() {
-            log::info!("Restarting");
-            return Ok(());
-        }
+        lag = lag.checked_sub(&duration_per_tick).unwrap();
     }
 }
 
 fn update_ledstrips(
     ledstrips: &mut [LedStrip],
-    effects: &mut HashMap<i32, Effect>,
-    effect_settings: &HashMap<i32, i32>,
-    settings: &HashMap<i32, Settings>,
+    effects: &mut HashMap<usize, Effect>,
+    effect_settings: &HashMap<usize, usize>,
+    settings: &HashMap<usize, Settings>,
 ) -> anyhow::Result<()> {
     for ledstrip in ledstrips {
         for (effect_id, interval) in &ledstrip.effects {
@@ -181,7 +212,7 @@ fn update_ledstrips(
 
 fn send_ledstrip_colors(
     ledstrips: &mut Vec<LedStrip>,
-    connections: &mut HashMap<i32, Connection>,
+    connections: &mut HashMap<usize, Connection>,
 ) -> anyhow::Result<()> {
     for ledstrip in ledstrips {
         if let Some(connection_id) = ledstrip.connection_id {
@@ -215,38 +246,33 @@ fn send_ledstrip_colors(
 
 fn main() -> Result<(), RunLoopError> {
     pretty_env_logger::init();
-    loop {
-        log::info!("patnais2");
-        let Args { settings_file } = Args::parse();
-        let TurboAudioConfig {
-            device_name,
-            jack,
-            sample_rate,
-            stream_connections,
-        } = TurboAudioConfig::new(&settings_file).map_err(|e| {
+    let Args { settings_file } = Args::parse();
+    let TurboAudioConfig {
+        device_name,
+        jack,
+        sample_rate,
+        stream_connections,
+    } = TurboAudioConfig::new(&settings_file).map_err(|e| {
+        log::error!("{:?}", e);
+        RunLoopError::LoadConfigFile
+    })?;
+
+    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
+        log::error!("{:?}", e);
+        RunLoopError::StartAudioLoop
+    })?;
+    let pipewire_controller = PipewireController::new();
+    pipewire_controller
+        .set_stream_connections(stream_connections)
+        .map_err(|e| {
             log::error!("{:?}", e);
-            RunLoopError::LoadConfigFile
+            RunLoopError::StartPipewireStream
         })?;
 
-        let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
-            log::error!("{:?}", e);
-            RunLoopError::StartAudioLoop
-        })?;
-        log::info!("a");
-        let pipewire_controller = PipewireController::new();
-        pipewire_controller
-            .set_stream_connections(stream_connections)
-            .map_err(|e| {
-                log::error!("{:?}", e);
-                RunLoopError::StartPipewireStream
-            })?;
+    let fft_buffer_size: usize = 1024;
+    let audio_processor =
+        audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
 
-        log::info!("b");
-        let fft_buffer_size: usize = 1024;
-        let audio_processor =
-            audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
-        log::info!("c");
-        test_and_run_loop(audio_processor)?;
-        log::info!("patnais");
-    }
+    test_and_run_loop(audio_processor)?;
+    Ok(())
 }

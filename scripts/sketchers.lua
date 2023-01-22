@@ -1,43 +1,39 @@
 require("scripts.libs.framework")
+require("scripts.libs.colors")
 
-SettingsSchema = {
-	title = "TurboSettings",
-	type = "object",
-	required = {
-		"enable_beep_boops",
-		"intensity",
-	},
-	properties = {
-		enable_beep_boops = {
-			type = "boolean",
-		},
-		intensity = {
-			type = "integer",
-			format = "int32",
-			maximum = 10.0,
-			minimum = 0.0,
-		},
-	},
-}
+SettingsSchema = {}
+
+local view = 1500
+local tick = 0
+
+local values = {}
+local tmpColors = {}
 
 function Tick()
-	local new_r = math.floor(math.min(4 * Fft_Result:get_average_amplitude(0, 150), 255))
-	local new_g = math.floor(math.min(15 * Fft_Result:get_average_amplitude(100, 1100), 255))
-	local new_b = math.floor(math.min(20 * Fft_Result:get_average_amplitude(1000, 2000), 255))
-	for i = 1, #Colors do
-		Colors[i].r = new_r
-		Colors[i].g = new_g
-		Colors[i].b = new_b
-	end
+	tick = tick + 1
+	for i = 0, #Colors - 1 do
+		local step = view / #Colors
+		local value = math.min(Fft_Result:get_frequency_amplitude(i * step) * 3, 255)
+		if values[i + 1] == nil then
+			values[i + 1] = value
+		else
+			values[i + 1] = math.max(value, values[i + 1] * 0.95)
+		end
 
-	-- for _ = 0, 1 do
-	-- 	for index = 0, #Colors - 2 do
-	-- 		Colors[#Colors - index].r = Colors[#Colors - index - 1].r
-	-- 		Colors[#Colors - index].g = Colors[#Colors - index - 1].g
-	-- 		Colors[#Colors - index].b = Colors[#Colors - index - 1].b
+		local hue = (i + tick) % #Colors / #Colors
+		local r, g, b = HsvToRgb(hue, 1, 1)
+		value = values[i + 1]
+		-- tmpColors[i + 1] = { r = r / 255 * value, g = g / 255 * value, b = b / 255 * value }
+		Colors[i + 1] = { r = r / 255 * value, g = g / 255 * value, b = b / 255 * value }
+	end
+	-- for _ = 0, 2 do
+	-- 	for j = 1, #Colors - 2 do
+	-- 		Colors[j + 1].r = tmpColors[j].r * 0.25 + tmpColors[j + 1].r * 0.5 + tmpColors[j + 2].r * 0.25
+	-- 		Colors[j + 1].g = tmpColors[j].g * 0.25 + tmpColors[j + 1].g * 0.5 + tmpColors[j + 2].g * 0.25
+	-- 		Colors[j + 1].r = tmpColors[j].b * 0.25 + tmpColors[j + 1].b * 0.5 + tmpColors[j + 2].b * 0.25
 	-- 	end
-	-- 	Colors[1].r = new_r
-	-- 	Colors[1].g = new_g
-	-- 	Colors[1].b = new_b
+	-- 	Colors[1] = Colors[2]
+	-- 	Colors[#Colors] = Colors[#Colors - 1]
+	-- 	tmpColors = Colors
 	-- end
 end
