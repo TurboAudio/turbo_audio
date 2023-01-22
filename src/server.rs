@@ -55,18 +55,18 @@ impl Server {
                     }
                 }
 
-                if let Ok(Ok(events)) = hot_reload_rx.try_recv() {
-                    for event in &events {
-                        if let Some(filename) = event.path.to_str() {
-                            if let Some(start) = filename.find("/./") {
-                                let filename = &filename[start + 3..];
-                                if let Ok(lua_effect) =
-                                    LuaEffect::new(filename, audio_processor.clone())
-                                {
-                                    let _ = tx.send(ServerEvent::NewLuaEffect(lua_effect));
+                for event in hot_reload_rx.try_iter().flatten().flatten() {
+                    if let Some(filename) = event.path.to_str() {
+                        if let Some(start) = filename.find("/./") {
+                            let filename = &filename[start + 3..];
+                            if let Ok(lua_effect) =
+                                LuaEffect::new(filename, audio_processor.clone())
+                            {
+                                if tx.send(ServerEvent::NewLuaEffect(lua_effect)).is_err() {
+                                    return;
                                 }
-                                log::info!("Reloaded effect {filename}");
                             }
+                            log::info!("Reloaded effect {filename}");
                         }
                     }
                 }
