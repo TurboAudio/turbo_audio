@@ -110,10 +110,6 @@ fn test_and_run_loop(
     controller.add_led_strip(led_strip_id, ls1);
     controller.link_led_strip_to_connection(led_strip_id, connection_id);
 
-    if let Err(e) = start_hot_reload_lua_effects() {
-        log::error!("Hot reload may not be active: {e:?}");
-    }
-
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
     let mut last_loop_start = std::time::Instant::now();
@@ -134,8 +130,8 @@ fn test_and_run_loop(
 
         for event in server_events.try_iter() {
             match event {
-                ServerEvent::NewLuaEffect(file_name, lua_effect) => {
-                    if let Some(id) = controller.lua_effects_registry.get(&file_name) {
+                ServerEvent::NewLuaEffect(lua_effect) => {
+                    if let Some(id) = controller.lua_effects_registry.get(lua_effect.get_filename()) {
                         controller.add_effect(*id, Effect::Lua(lua_effect));
                     }
                 }

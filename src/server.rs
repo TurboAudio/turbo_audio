@@ -16,7 +16,7 @@ use crate::{
 type EffectSettings = RwLock<HashMap<usize, Settings>>;
 
 pub enum ServerEvent {
-    NewLuaEffect(String, LuaEffect),
+    NewLuaEffect(LuaEffect),
 }
 #[derive(Default)]
 pub struct ServerState {
@@ -63,10 +63,7 @@ impl Server {
                                 if let Ok(lua_effect) =
                                     LuaEffect::new(filename, audio_processor.clone())
                                 {
-                                    let _ = tx.send(ServerEvent::NewLuaEffect(
-                                        filename.to_string(),
-                                        lua_effect,
-                                    ));
+                                    let _ = tx.send(ServerEvent::NewLuaEffect(lua_effect));
                                 }
                                 log::info!("Reloaded effect {filename}");
                             }
