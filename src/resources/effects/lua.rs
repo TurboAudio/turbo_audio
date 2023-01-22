@@ -87,7 +87,7 @@ impl mlua::UserData for LuaFftResult {
 impl LuaEffect {
     pub fn new(
         filename: &str,
-        audio_processor: &AudioSignalProcessor,
+        audio_processor: Arc<RwLock<AudioSignalProcessor>>,
     ) -> Result<Self, LuaEffectLoadError> {
         let (lua, json_schema, compiled_json_schema) =
             Self::get_lua_effect(filename, audio_processor)?;
@@ -170,7 +170,7 @@ impl LuaEffect {
 
     fn get_lua_effect(
         filename: &str,
-        audio_processor: &AudioSignalProcessor,
+        audio_processor: Arc<RwLock<AudioSignalProcessor>>,
     ) -> Result<(Lua, String, JSONSchema), LuaEffectLoadError> {
         let lua_src = fs::read_to_string(filename).map_err(LuaEffectLoadError::File)?;
         let lua = Lua::new();
@@ -183,7 +183,7 @@ impl LuaEffect {
             .set(
                 "Fft_Result",
                 LuaFftResult {
-                    fft_result: audio_processor.fft_result.clone(),
+                    fft_result: audio_processor.read().unwrap().fft_result.clone(),
                 },
             )
             .unwrap();

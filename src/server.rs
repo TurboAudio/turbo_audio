@@ -1,13 +1,22 @@
-use std::{sync::{RwLock, Arc, Mutex, mpsc::{Receiver, self}}, collections::HashMap, thread::JoinHandle};
+use std::{
+    collections::HashMap,
+    sync::{
+        mpsc::{self, Receiver},
+        Arc, Mutex, RwLock,
+    },
+    thread::JoinHandle,
+};
 
-use crate::resources::{settings::Settings, effects::{Effect, moody::Moody}};
-
+use crate::{
+    audio_processing::AudioSignalProcessor,
+    hot_reload::start_hot_reload_lua_effects,
+    resources::{effects::lua::LuaEffect, settings::Settings},
+};
 
 type EffectSettings = RwLock<HashMap<usize, Settings>>;
 
 pub enum ServerEvent {
-    NewEffect(usize, Effect),
-    Pipi(),
+    NewLuaEffect(String, LuaEffect),
 }
 #[derive(Default)]
 pub struct ServerState {
@@ -18,14 +27,16 @@ pub struct Server {
     state: Arc<ServerState>,
     server_thread: Option<JoinHandle<()>>,
     force_exit_server: Arc<Mutex<bool>>,
+    audio_processor: Arc<RwLock<AudioSignalProcessor>>,
 }
 
 impl Server {
-    pub fn new() -> Self {
+    pub fn new(audio_processor: Arc<RwLock<AudioSignalProcessor>>) -> Self {
         Self {
             state: Arc::default(),
             server_thread: None,
             force_exit_server: Arc::new(Mutex::new(false)),
+            audio_processor,
         }
     }
 
@@ -33,9 +44,9 @@ impl Server {
         let (tx, rx) = mpsc::channel();
         let _state = self.state.clone();
         let should_force_exit = self.force_exit_server.clone();
-        let mut alternate = true;
-        let mut i: usize = 0;
+        let audio_processor = self.audio_processor.clone();
         self.server_thread = Some(std::thread::spawn(move || {
+            let (hot_reload_rx, _debouncer) = start_hot_reload_lua_effects().unwrap();
             loop {
                 if let Ok(should_exit) = should_force_exit.lock() {
                     if *should_exit {
@@ -44,20 +55,24 @@ impl Server {
                     }
                 }
 
-                let event = {
-                    if alternate {
-                        ServerEvent::Pipi()
-                    } else {
-                        i += 1;
-                        ServerEvent::NewEffect(i, Effect::Moody(Moody {}))
+                if let Ok(Ok(events)) = hot_reload_rx.try_recv() {
+                    for event in &events {
+                        if let Some(filename) = event.path.to_str() {
+                            if let Some(start) = filename.find("/./") {
+                                let filename = &filename[start + 3..];
+                                if let Ok(lua_effect) =
+                                    LuaEffect::new(filename, audio_processor.clone())
+                                {
+                                    let _ = tx.send(ServerEvent::NewLuaEffect(
+                                        filename.to_string(),
+                                        lua_effect,
+                                    ));
+                                }
+                                log::info!("Reloaded effect {filename}");
+                            }
+                        }
                     }
-                };
-
-                if tx.send(event).is_err() {
-                    break;
                 }
-                alternate = !alternate;
-                std::thread::sleep(std::time::Duration::from_secs(5));
             }
         }));
         log::trace!("Server stated");

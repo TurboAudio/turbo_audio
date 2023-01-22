@@ -12,11 +12,11 @@ use resources::{color::Color, ledstrip::LedStrip};
 use server::{Server, ServerEvent};
 use std::{
     net::{Ipv4Addr, SocketAddrV4},
-    sync::mpsc::Receiver,
+    sync::{mpsc::Receiver, Arc, RwLock},
 };
 
 use controller::Controller;
-use hot_reload::{check_lua_files_changed, start_hot_reload_lua_effects};
+use hot_reload::start_hot_reload_lua_effects;
 
 use audio::start_audio_loop;
 use clap::Parser;
@@ -51,13 +51,13 @@ enum RunLoopError {
 }
 
 fn test_and_run_loop(
-    mut audio_processor: AudioSignalProcessor,
+    audio_processor: Arc<RwLock<AudioSignalProcessor>>,
     server_events: Receiver<ServerEvent>,
 ) -> Result<(), RunLoopError> {
     let mut controller = Controller::new();
 
     let lua_id: usize = 1;
-    let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
+    let lua_effect = LuaEffect::new("scripts/sketchers.lua", audio_processor.clone()).map_err(|e| {
         log::error!("{:?}", e);
         RunLoopError::LoadEffect
     })?;
@@ -112,7 +112,6 @@ fn test_and_run_loop(
     if let Err(e) = start_hot_reload_lua_effects() {
         log::error!("Hot reload may not be active: {e:?}");
     }
-    let (hot_reload_rx, _debouncer) = start_hot_reload_lua_effects().unwrap();
 
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
@@ -127,25 +126,18 @@ fn test_and_run_loop(
             duration_per_tick.checked_sub(&lag).unwrap(),
         );
         std::thread::sleep(current_sleep_duration.to_std().unwrap());
-        audio_processor.compute_fft();
+        audio_processor.write().unwrap().compute_fft();
 
-        let _fft_result_read_lock = audio_processor.fft_result.read().unwrap();
         controller.update_led_strips();
         controller.send_ledstrip_colors();
 
-        check_lua_files_changed(
-            &hot_reload_rx,
-            &mut controller.effects,
-            &controller.lua_effects_registry,
-            &audio_processor,
-        );
-
         for event in server_events.try_iter() {
             match event {
-                ServerEvent::NewEffect(id, effect) => {
-                    log::trace!("New effect received from server: {id} -- {effect:?}")
+                ServerEvent::NewLuaEffect(file_name, lua_effect) => {
+                    if let Some(id) = controller.lua_effects_registry.get(&file_name) {
+                        controller.add_effect(*id, Effect::Lua(lua_effect));
+                    }
                 }
-                ServerEvent::Pipi() => log::trace!("Pipi event received from server"),
             }
         }
 
@@ -178,11 +170,12 @@ fn main() -> Result<(), RunLoopError> {
             RunLoopError::StartPipewireStream
         })?;
 
-    let mut server = Server::new();
-    let server_events = server.start();
     let fft_buffer_size: usize = 1024;
     let audio_processor =
         audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
+    let audio_processor = Arc::new(RwLock::new(audio_processor));
+    let mut server = Server::new(audio_processor.clone());
+    let server_events = server.start();
     test_and_run_loop(audio_processor, server_events)?;
     server.stop();
     Ok(())
