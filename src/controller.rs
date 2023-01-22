@@ -11,12 +11,12 @@ use std::collections::HashMap;
 #[allow(unused)]
 pub struct Controller {
     settings: HashMap<usize, Settings>,
-    effects: HashMap<usize, Effect>,
+    pub effects: HashMap<usize, Effect>,
     effect_settings: HashMap<usize, usize>,
     connections: HashMap<usize, Connection>,
     led_strips: HashMap<usize, LedStrip>,
     led_strip_connections: HashMap<usize, usize>,
-    lua_effects_registry: HashMap<String, usize>,
+    pub lua_effects_registry: HashMap<String, usize>,
 }
 
 impl Controller {
@@ -54,7 +54,7 @@ impl Controller {
     }
 
     pub fn update_led_strips(&mut self) {
-        for (led_strip_id, led_strip) in &self.led_strips {
+        for (led_strip_id, led_strip) in self.led_strips.iter_mut() {
             for (effect_id, interval) in &led_strip.effects {
                 let leds = match led_strip.colors.get_mut(interval.0..=interval.1) {
                     Some(leds) => leds,
@@ -100,5 +100,40 @@ impl Controller {
                 }
             }
         }
+    }
+    pub fn send_ledstrip_colors(
+        &mut self,
+        // ledstrips: &mut Vec<LedStrip>,
+        // connections: &mut HashMap<usize, Connection>,
+        // ledstrip_connections: &mut HashMap<usize, usize>,
+        // ledstrip_id: usize,
+    ) -> anyhow::Result<()> {
+        self.led_strip_connections.retain(|ledstrip_id, connection_id| {
+            if let Some(ledstrip) = self.led_strips.get(ledstrip_id) {
+                if let Some(connection) = self.connections.get_mut(connection_id) {
+                    let data = ledstrip
+                        .colors
+                        .iter()
+                        .flat_map(|color| color.to_bytes())
+                        .collect::<Vec<_>>();
+                    match connection {
+                        Connection::Tcp(tcp_connection) => {
+                            // If send fails, connection is closed.
+                            if let Err(error) = tcp_connection.send_data(data) {
+                                log::error!("{:?}", error);
+                                self.connections.remove(connection_id);
+                                return false;
+                            }
+                        }
+                        Connection::Usb(_terminal) => {
+                            todo!("Implement Usb connection");
+                        }
+                    }
+                    return true;
+                }
+            }
+            false
+        });
+        Ok(())
     }
 }
