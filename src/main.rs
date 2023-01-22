@@ -4,15 +4,17 @@ mod config_parser;
 mod connections;
 mod pipewire_listener;
 mod resources;
+mod server;
 use audio_processing::AudioSignalProcessor;
 use resources::{
     color::Color,
     effects::{moody::update_moody, raindrop::update_raindrop},
     ledstrip::LedStrip,
 };
+use server::{Server, ServerEvent};
 use std::{
     collections::HashMap,
-    net::{Ipv4Addr, SocketAddrV4},
+    net::{Ipv4Addr, SocketAddrV4}, sync::mpsc::Receiver,
 };
 
 use anyhow::anyhow;
@@ -48,7 +50,7 @@ enum RunLoopError {
     StartPipewireStream,
 }
 
-fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), RunLoopError> {
+fn test_and_run_loop(mut audio_processor: AudioSignalProcessor, server_events: Receiver<ServerEvent>) -> Result<(), RunLoopError> {
     let mut settings: HashMap<i32, Settings> = HashMap::default();
     let mut effects: HashMap<i32, Effect> = HashMap::default();
     let mut effect_settings: HashMap<i32, i32> = HashMap::default();
@@ -122,6 +124,14 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
         let _update_result =
             update_ledstrips(&mut ledstrips, &mut effects, &effect_settings, &settings);
         let _send_result = send_ledstrip_colors(&mut ledstrips, &mut connections);
+
+        for event in server_events.try_iter() {
+            match event {
+                ServerEvent::NewEffect(id, effect) => log::trace!("New effect received from server: {id} -- {effect:?}"),
+                ServerEvent::Pipi() => log::trace!("Pipi event received from server"),
+            }
+
+        }
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
     }
@@ -224,9 +234,12 @@ fn main() -> Result<(), RunLoopError> {
             RunLoopError::StartPipewireStream
         })?;
 
+    let mut server = Server::new();
+    let server_events = server.start();
     let fft_buffer_size: usize = 1024;
     let audio_processor =
         audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
-    test_and_run_loop(audio_processor)?;
+    test_and_run_loop(audio_processor, server_events)?;
+    server.stop();
     Ok(())
 }
