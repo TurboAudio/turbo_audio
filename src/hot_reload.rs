@@ -18,4 +18,3 @@ pub fn start_hot_reload_lua_effects(
 
     Ok((rx, debouncer))
 }
-

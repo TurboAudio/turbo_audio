@@ -57,10 +57,11 @@ fn test_and_run_loop(
     let mut controller = Controller::new();
 
     let lua_id: usize = 1;
-    let lua_effect = LuaEffect::new("scripts/sketchers.lua", audio_processor.clone()).map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::LoadEffect
-    })?;
+    let lua_effect =
+        LuaEffect::new("scripts/sketchers.lua", audio_processor.clone()).map_err(|e| {
+            log::error!("{:?}", e);
+            RunLoopError::LoadEffect
+        })?;
     let lua_setting_id: usize = 1;
     let lua_settings = LuaEffectSettings {
         settings: serde_json::json!({
