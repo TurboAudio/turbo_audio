@@ -14,6 +14,7 @@ use notify_debouncer_mini::{
 use std::{collections::HashMap, path::Path, sync::mpsc::Receiver};
 
 pub type HotReloadReceiver = Receiver<Result<Vec<DebouncedEvent>, Vec<Error>>>;
+
 pub fn start_hot_reload_lua_effects(
 ) -> Result<(HotReloadReceiver, Debouncer<RecommendedWatcher>), Error> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -35,12 +36,9 @@ pub fn check_lua_files_changed(
     if let Ok(Ok(events)) = hot_reload_rx.try_recv() {
         for event in &events {
             if let Some(filename) = event.path.to_str() {
-                if let Err(e) = on_lua_file_changed(
-                    filename,
-                    effects,
-                    lua_effects_registry,
-                    audio_processor,
-                ) {
+                if let Err(e) =
+                    on_lua_file_changed(filename, effects, lua_effects_registry, audio_processor)
+                {
                     log::error!("Aborted reloading lua script {e:?}");
                 }
             }

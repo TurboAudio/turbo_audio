@@ -1,8 +1,7 @@
 use crate::resources::color::Color;
 
 #[derive(Debug)]
-pub struct Moody {
-}
+pub struct Moody {}
 
 #[derive(Clone, Copy, Debug)]
 pub struct MoodySettings {
