@@ -5,6 +5,7 @@ mod connections;
 mod hot_reload;
 mod pipewire_listener;
 mod resources;
+mod controller;
 
 use audio_processing::AudioSignalProcessor;
 use hot_reload::{check_lua_files_changed, start_hot_reload_lua_effects};
@@ -34,6 +35,7 @@ use crate::resources::{
     },
     settings::Settings,
 };
+use crate::controller::Controller;
 
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
@@ -49,23 +51,6 @@ enum RunLoopError {
     LoadConfigFile,
     StartAudioLoop,
     StartPipewireStream,
-}
-
-fn get_id<T>(object: &T) -> usize {
-    object as *const _ as usize
-}
-
-fn register_effect(
-    effect: Effect,
-    effects: &mut HashMap<usize, Effect>,
-    lua_effect_registry: &mut HashMap<String, usize>,
-) -> usize {
-    let id = get_id(&effect);
-    if let Effect::Lua(lua_effect) = &effect {
-        lua_effect_registry.insert(lua_effect.get_filename().to_owned(), id);
-    }
-    effects.insert(id, effect);
-    id
 }
 
 fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), RunLoopError> {
@@ -94,22 +79,22 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     settings.insert(2, Settings::Lua(lua_settings));
 
     let moody = Moody {};
-    let moody_id = register_effect(
-        Effect::Moody(moody),
-        &mut effects,
-        &mut lua_effects_registry,
-    );
-    effect_settings.insert(moody_id, 0);
+    // let moody_id = register_effect(
+    //     Effect::Moody(moody),
+    //     &mut effects,
+    //     &mut lua_effects_registry,
+    // );
+    // effect_settings.insert(moody_id, 0);
 
     let raindrop = Raindrops {
         state: RaindropState { riples: vec![] },
     };
-    let raindrops_id = register_effect(
-        Effect::Raindrop(raindrop),
-        &mut effects,
-        &mut lua_effects_registry,
-    );
-    effect_settings.insert(raindrops_id, 1);
+    // let raindrops_id = register_effect(
+    //     Effect::Raindrop(raindrop),
+    //     &mut effects,
+    //     &mut lua_effects_registry,
+    // );
+    // effect_settings.insert(raindrops_id, 1);
 
     let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
         log::error!("{:?}", e);
