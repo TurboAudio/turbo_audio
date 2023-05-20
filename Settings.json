@@ -1,8 +1,8 @@
 {
   "device_name": null,
-  "jack": false,
-  "sample_rate": 48000,
-  "stream_connections": [
+    "jack": false,
+    "sample_rate": 48000,
+    "stream_connections": [
     {
       "output_stream": "spotify",
       "input_stream": "ALSA plug-in [turbo_audio]",
@@ -19,5 +19,50 @@
         ]
       }
     }
-  ]
+    ],
+    "effect_settings": [
+        {
+            "type": "Lua",
+            "id": 1
+        }
+    ],
+    "effects": [
+        {
+            "type": "Lua",
+            "effect_id": 1,
+            "setting_id": 1,
+            "file_name": "scripts/sketchers.lua"
+        },
+        {
+            "type": "Lua",
+            "effect_id": 2,
+            "setting_id": 1,
+            "file_name": "scripts/sketchers.lua"
+        }
+    ],
+    "device_connections": [
+        {
+            "type": "Tcp",
+            "id": 1,
+            "ip": "192.168.0.14",
+            "port": 1234
+        }
+    ],
+    "ledstrips": [
+        {
+            "ledstrip_id": 1,
+            "connection_id": 1,
+            "size": 300,
+            "effects": [
+                {
+                    "effect_id": 1,
+                    "effect_size": 150
+                },
+                {
+                    "effect_id": 2,
+                    "effect_size": 150
+                }
+            ]
+        }
+    ]
 }

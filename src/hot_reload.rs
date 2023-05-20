@@ -30,7 +30,7 @@ pub fn start_hot_reload_lua_effects(
 pub fn check_lua_files_changed(
     hot_reload_rx: &HotReloadReceiver,
     effects: &mut HashMap<usize, Effect>,
-    lua_effects_registry: &HashMap<String, usize>,
+    lua_effects_registry: &HashMap<String, Vec<usize>>,
     audio_processor: &AudioSignalProcessor,
 ) {
     if let Ok(Ok(events)) = hot_reload_rx.try_recv() {
@@ -49,16 +49,18 @@ pub fn check_lua_files_changed(
 fn on_lua_file_changed(
     filename: &str,
     effects: &mut HashMap<usize, Effect>,
-    lua_effect_registry: &HashMap<String, usize>,
+    lua_effect_registry: &HashMap<String, Vec<usize>>,
     audio_processor: &AudioSignalProcessor,
 ) -> Result<(), LuaEffectLoadError> {
     if let Some(start) = filename.find("/./") {
         let filename = &filename[start + 3..];
-        if let Some(id) = lua_effect_registry.get(filename) {
-            if let Some(Effect::Lua(_)) = effects.get(id) {
-                let lua_effect = LuaEffect::new(filename, audio_processor)?;
-                effects.insert(*id, Effect::Lua(lua_effect));
-                log::info!("Reloaded effect {filename}");
+        if let Some(ids) = lua_effect_registry.get(filename) {
+            for id in ids {
+                if let Some(Effect::Lua(_)) = effects.get(id) {
+                    let lua_effect = LuaEffect::new(filename, audio_processor)?;
+                    effects.insert(*id, Effect::Lua(lua_effect));
+                    log::info!("Reloaded effect {filename} with id {id}");
+                }
             }
         }
     }

@@ -1,4 +1,5 @@
 mod audio;
+mod audio_config;
 mod audio_processing;
 mod config_parser;
 mod connections;
@@ -7,7 +8,9 @@ mod hot_reload;
 mod pipewire_listener;
 mod resources;
 
+use audio_config::AudioConfig;
 use audio_processing::AudioSignalProcessor;
+use config_parser::parse_config;
 use controller::Controller;
 use hot_reload::{check_lua_files_changed, start_hot_reload_lua_effects};
 use resources::{color::Color, ledstrip::LedStrip};
@@ -22,15 +25,7 @@ use config_parser::TurboAudioConfig;
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
 use pipewire_listener::{PipewireController, PortConnections, StreamConnections};
 
-use crate::resources::{
-    effects::{
-        lua::{LuaEffect, LuaEffectSettings},
-        moody::{Moody, MoodySettings},
-        raindrop::{RaindropSettings, RaindropState, Raindrops},
-        Effect,
-    },
-    settings::Settings,
-};
+use crate::resources::{effects::Effect, settings::Settings};
 
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
@@ -42,13 +37,15 @@ struct Args {
 
 #[derive(Debug)]
 enum RunLoopError {
-    LoadEffect,
     LoadConfigFile,
     StartAudioLoop,
     StartPipewireStream,
 }
 
-fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), RunLoopError> {
+fn run_loop(
+    mut audio_processor: AudioSignalProcessor,
+    mut controller: Controller,
+) -> Result<(), RunLoopError> {
     let mut controller = Controller::new();
 
     let lua_id: usize = 1;
@@ -139,10 +136,19 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     }
 }
 
+fn map_and_log_error<T, ErrorType: std::fmt::Debug, NewErrorType>(
+    result: Result<T, ErrorType>,
+    mapped_error: NewErrorType,
+) -> Result<T, NewErrorType> {
+    result.map_err(|e| {
+        log::error!("{:?}", e);
+        mapped_error
+    })
+}
+
 fn main() -> Result<(), RunLoopError> {
     env_logger::init();
     let Args { settings_file } = Args::parse();
-
     let config: TurboAudioConfig = serde_json::from_reader(&File::open(settings_file).unwrap()).unwrap();
     let TurboAudioConfig {
         device_name,
@@ -151,10 +157,11 @@ fn main() -> Result<(), RunLoopError> {
         stream_connections,
     } = config;
 
-    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::StartAudioLoop
-    })?;
+    let (_stream, audio_rx) = map_and_log_error(
+        start_audio_loop(device_name, jack, sample_rate),
+        RunLoopError::StartAudioLoop,
+    )?;
+
     let pipewire_controller = PipewireController::new();
     log::info!("Eille");
     pipewire_controller
@@ -166,8 +173,13 @@ fn main() -> Result<(), RunLoopError> {
 
     let fft_buffer_size: usize = 1024;
     let audio_processor =
-        audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
+        AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
 
-    test_and_run_loop(audio_processor)?;
+    let controller = map_and_log_error(
+        parse_config(&settings_file, &audio_processor),
+        RunLoopError::LoadConfigFile,
+    )?;
+
+    run_loop(audio_processor, controller)?;
     Ok(())
 }
