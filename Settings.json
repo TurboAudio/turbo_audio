@@ -1,16 +1,23 @@
 {
-    "jack": false,
-    "sample_rate": 48000,
-    "connections": [
-        {
-            "output_stream": "DigiHug USB Audio",
-            "input_stream": "ALSA plug-in [turbo_audio]",
-            "port_connections": "AllInOrder"
-        },
-        {
-            "output_stream": "spotify",
-            "input_stream": "ALSA plug-in [turbo_audio]",
-            "port_connections": "AllInOrder"
-        }
-    ]
+  "device_name": null,
+  "jack": false,
+  "sample_rate": 48000,
+  "stream_connections": [
+    {
+      "output_stream": "spotify",
+      "input_stream": "ALSA plug-in [turbo_audio]",
+      "port_connections": {
+        "Only": [
+          [
+            "output_FL",
+            "input_FL"
+          ],
+          [
+            "output_FR",
+            "input_FR"
+          ]
+        ]
+      }
+    }
+  ]
 }

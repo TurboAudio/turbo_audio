@@ -11,13 +11,16 @@ use audio_processing::AudioSignalProcessor;
 use controller::Controller;
 use hot_reload::{check_lua_files_changed, start_hot_reload_lua_effects};
 use resources::{color::Color, ledstrip::LedStrip};
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::{
+    fs::File,
+    net::{Ipv4Addr, SocketAddrV4},
+};
 
 use audio::start_audio_loop;
 use clap::Parser;
 use config_parser::TurboAudioConfig;
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
-use pipewire_listener::PipewireController;
+use pipewire_listener::{PipewireController, PortConnections, StreamConnections};
 
 use crate::resources::{
     effects::{
@@ -33,7 +36,7 @@ use crate::resources::{
 #[command(author, version, long_about = None)]
 struct Args {
     /// Settings file
-    #[arg(long, default_value_t = String::from("Settings"))]
+    #[arg(long, default_value_t = String::from("Settings.json"))]
     settings_file: String,
 }
 
@@ -139,15 +142,14 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
 fn main() -> Result<(), RunLoopError> {
     pretty_env_logger::init();
     let Args { settings_file } = Args::parse();
+
+    let config: TurboAudioConfig = serde_json::from_reader(&File::open(settings_file).unwrap()).unwrap();
     let TurboAudioConfig {
         device_name,
         jack,
         sample_rate,
         stream_connections,
-    } = TurboAudioConfig::new(&settings_file).map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::LoadConfigFile
-    })?;
+    } = config;
 
     let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
         log::error!("{:?}", e);

@@ -1,10 +1,11 @@
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use pipewire::{
     prelude::ReadableDict,
     registry::{GlobalObject, Registry},
     spa::ForeignDict,
     Core, MainLoop,
 };
-
+use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -12,8 +13,6 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-
-use anyhow::{anyhow, bail, ensure, Context, Result};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
@@ -54,13 +53,13 @@ enum PipewireObjectType {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PortConnections {
     AllInOrder,
     Only(Vec<(String, String)>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamConnections {
     pub output_stream: String,
     pub input_stream: String,
