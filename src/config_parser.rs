@@ -1,5 +1,4 @@
 use crate::pipewire_listener::{PortConnections, StreamConnections};
-use config::{Config, ConfigError, ValueKind};
 use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
