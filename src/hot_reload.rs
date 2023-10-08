@@ -27,6 +27,17 @@ pub fn start_hot_reload_lua_effects(
     Ok((rx, debouncer))
 }
 
+pub fn start_config_hot_reload() -> Result<(HotReloadReceiver, Debouncer<RecommendedWatcher>), Error> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut debouncer = new_debouncer(std::time::Duration::from_millis(50), None, tx).unwrap();
+
+    debouncer
+        .watcher()
+        .watch(Path::new("./Settings.json"), RecursiveMode::NonRecursive)?;
+
+    Ok((rx, debouncer))
+}
+
 pub fn check_lua_files_changed(
     hot_reload_rx: &HotReloadReceiver,
     effects: &mut HashMap<usize, Effect>,
