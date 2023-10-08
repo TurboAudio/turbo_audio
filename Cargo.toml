@@ -19,7 +19,7 @@ log = "0.4.17"
 mlua = { version = "0.8.6", features = ["luajit52", "vendored", "async", "send", "serialize"] }
 notify-debouncer-mini = { version = "0.2.1" }
 pipewire = "0.7.2"
-pretty_env_logger = "0.4.0"
+env_logger = "0.10.0"
 rand = "0.8"
 retry = "2.0.0"
 ring-channel = "0.11.0"

@@ -90,7 +90,7 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
     controller.add_effect(raindrop_id, Effect::Raindrop(raindrop));
     controller.link_effect_to_settings(raindrop_id, raindrop_settings_id);
 
-    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 10), 1234));
+    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 159), 1234));
     // let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42069));
     let connection = TcpConnection::new(ip);
     let connection_id = 1;
@@ -140,7 +140,7 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
 }
 
 fn main() -> Result<(), RunLoopError> {
-    pretty_env_logger::init();
+    env_logger::init();
     let Args { settings_file } = Args::parse();
 
     let config: TurboAudioConfig = serde_json::from_reader(&File::open(settings_file).unwrap()).unwrap();
@@ -156,6 +156,7 @@ fn main() -> Result<(), RunLoopError> {
         RunLoopError::StartAudioLoop
     })?;
     let pipewire_controller = PipewireController::new();
+    log::info!("Eille");
     pipewire_controller
         .set_stream_connections(stream_connections)
         .map_err(|e| {

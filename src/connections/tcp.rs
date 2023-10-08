@@ -88,13 +88,15 @@ impl TcpConnection {
     ) -> Result<TcpStream, ConnectionAttemptError> {
         let max_connection_attempts = max_connection_attempts.unwrap_or(20);
         let connection_timeout = connection_timeout.unwrap_or(Duration::from_secs(3));
-        for _ in 0..max_connection_attempts {
+        for i in 0..max_connection_attempts {
             let stream = TcpStream::connect_timeout(&ip, connection_timeout);
+            log::info!("[{i}/{max_connection_attempts}] Attempting to connect to {ip}");
             match stream {
                 Ok(stream) => {
                     stream
                         .set_write_timeout(Some(Duration::from_millis(100)))
                         .map_err(ConnectionAttemptError::ConfigurationFailed)?;
+                    log::info!("Connected to {ip}");
                     return Ok(stream);
                 }
                 Err(_) => continue,
