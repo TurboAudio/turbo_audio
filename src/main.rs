@@ -9,29 +9,17 @@ mod resources;
 
 use audio_processing::AudioSignalProcessor;
 use controller::Controller;
-use hot_reload::{check_lua_files_changed, start_hot_reload_lua_effects};
-use resources::{color::Color, ledstrip::LedStrip};
-use std::{
-    fs::File,
-    net::{Ipv4Addr, SocketAddrV4},
-};
+use hot_reload::{HotReloadReceiver, check_lua_files_changed, start_hot_reload_lua_effects, start_config_hot_reload};
+use resources::effects::{lua::{LuaEffect, LuaEffectSettings}, moody::{Moody, MoodySettings}, raindrop::{Raindrops, RaindropState, RaindropSettings}};
+use std::{fs::File, sync::mpsc::TryRecvError};
 
 use audio::start_audio_loop;
 use clap::Parser;
-use config_parser::TurboAudioConfig;
-use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
-use pipewire_listener::{PipewireController, PortConnections, StreamConnections};
+use config_parser::{TurboAudioConfig, ConnectionConfigType, SettingsConfigType, EffectConfigType};
+use connections::{Connection, tcp::TcpConnection, usb::UsbConnection};
+use pipewire_listener::PipewireController;
 
-use crate::resources::{
-    effects::{
-        lua::{LuaEffect, LuaEffectSettings},
-        moody::{Moody, MoodySettings},
-        raindrop::{RaindropSettings, RaindropState, Raindrops},
-        Effect,
-    },
-    settings::Settings,
-};
-
+use crate::resources::{effects::Effect, settings::Settings, ledstrip::LedStrip};
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
 struct Args {
@@ -42,68 +30,16 @@ struct Args {
 
 #[derive(Debug)]
 enum RunLoopError {
-    LoadEffect,
     LoadConfigFile,
     StartAudioLoop,
     StartPipewireStream,
 }
 
-fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), RunLoopError> {
-    let mut controller = Controller::new();
-
-    let lua_id: usize = 1;
-    let lua_effect = LuaEffect::new("scripts/sketchers.lua", &audio_processor).map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::LoadEffect
-    })?;
-    let lua_setting_id: usize = 1;
-    let lua_settings = LuaEffectSettings {
-        settings: serde_json::json!({
-            "enable_beep_boops": true,
-            "intensity": 11,
-        }),
-    };
-    controller.add_effect(lua_id, Effect::Lua(lua_effect));
-    controller.add_settings(lua_setting_id, Settings::Lua(lua_settings));
-    controller.link_effect_to_settings(lua_id, lua_setting_id);
-
-    let moody_id: usize = 2;
-    let moody = Moody {};
-    let moody_settings_id: usize = 2;
-    let moody_settings = MoodySettings {
-        color: Color { r: 255, g: 0, b: 0 },
-    };
-    controller.add_settings(moody_settings_id, Settings::Moody(moody_settings));
-    controller.add_effect(moody_id, Effect::Moody(moody));
-    controller.link_effect_to_settings(moody_id, moody_settings_id);
-
-    let raindrop_id: usize = 3;
-    let raindrop = Raindrops {
-        state: RaindropState { riples: vec![] },
-    };
-    let raindrop_settings_id = 3;
-    let raindrop_settings = RaindropSettings {
-        rain_speed: 1,
-        drop_rate: 0.10,
-    };
-    controller.add_settings(raindrop_settings_id, Settings::Raindrop(raindrop_settings));
-    controller.add_effect(raindrop_id, Effect::Raindrop(raindrop));
-    controller.link_effect_to_settings(raindrop_id, raindrop_settings_id);
-
-    let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(192, 168, 0, 159), 1234));
-    // let ip = std::net::SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 42069));
-    let connection = TcpConnection::new(ip);
-    let connection_id = 1;
-    controller.add_connection(connection_id, Connection::Tcp(connection));
-    controller.add_connection(2, Connection::Usb(UsbConnection {}));
-
-    let mut ls1 = LedStrip::default();
-    let led_strip_id: usize = 1;
-    ls1.set_led_count(300);
-    ls1.add_effect(lua_id, 300);
-    controller.add_led_strip(led_strip_id, ls1);
-    controller.link_led_strip_to_connection(led_strip_id, connection_id);
-
+fn run_loop(
+    mut audio_processor: AudioSignalProcessor,
+    mut controller: Controller,
+    reload_config_rx: &HotReloadReceiver
+) -> Result<(), RunLoopError> {
     if let Err(e) = start_hot_reload_lua_effects() {
         log::error!("Hot reload may not be active: {e:?}");
     }
@@ -135,39 +71,110 @@ fn test_and_run_loop(mut audio_processor: AudioSignalProcessor) -> Result<(), Ru
             &audio_processor,
         );
 
+        match reload_config_rx.try_recv() {
+            Ok(_) => return Ok(()),
+            Err(TryRecvError::Disconnected) => {
+                log::error!("Disconnected patnais")
+            },
+            _ => {}
+        }
+
         lag = lag.checked_sub(&duration_per_tick).unwrap();
     }
+}
+
+#[derive(Debug)]
+enum LoadControllerError {
+    Invalid,
+}
+
+fn load_controller(config: &TurboAudioConfig, audio_processor: &AudioSignalProcessor) -> Result<Controller, LoadControllerError> {
+    let mut controller = Controller::new();
+    for connection_config in config.devices.iter() {
+        match &connection_config.connection {
+            ConnectionConfigType::Tcp(ip) => controller.add_connection(connection_config.id, Connection::Tcp(TcpConnection::new(*ip))),
+            ConnectionConfigType::Usb() => controller.add_connection(connection_config.id, Connection::Usb(UsbConnection {}))
+        }
+    }
+
+    for setting_config in config.effect_settings.iter() {
+        match &setting_config.setting {
+            SettingsConfigType::Lua(settings) => controller.add_settings(setting_config.id, Settings::Lua(LuaEffectSettings{settings: settings.clone()})),
+            SettingsConfigType::Moody(color) => controller.add_settings(setting_config.id, Settings::Moody(MoodySettings{color: *color})),
+            SettingsConfigType::Raindrop() => controller.add_settings(setting_config.id, Settings::Raindrop(RaindropSettings { rain_speed: 1, drop_rate: 0.5 }))
+        }
+    }
+
+    for effect_settings in config.effects.iter() {
+        match &effect_settings.effect {
+            EffectConfigType::Lua(file_name) => controller.add_effect(effect_settings.effect_id, Effect::Lua(LuaEffect::new(file_name.as_str(), audio_processor).unwrap())),
+            EffectConfigType::Moody() => controller.add_effect(effect_settings.effect_id, Effect::Moody(Moody {})),
+            EffectConfigType::Raindrop() => controller.add_effect(effect_settings.effect_id, Effect::Raindrop(Raindrops { state: RaindropState { riples: vec![]} }))
+        }
+        if !controller.link_effect_to_settings(effect_settings.effect_id, effect_settings.settings_id) {
+            return Err(LoadControllerError::Invalid);
+        }
+    }
+
+    for ledstrip_config in config.ledstrips.iter() {
+        let mut ledstrip = LedStrip::default();
+        ledstrip.set_led_count(ledstrip_config.size);
+        for effect in ledstrip_config.effects.iter() {
+            if !ledstrip.add_effect(effect.effect_id, effect.effect_size) {
+                return Err(LoadControllerError::Invalid);
+            }
+        }
+        controller.add_led_strip(ledstrip_config.id, ledstrip);
+        if !controller.link_led_strip_to_connection(ledstrip_config.id, ledstrip_config.connection_id) {
+            return Err(LoadControllerError::Invalid);
+        }
+    }
+
+    Ok(controller)
 }
 
 fn main() -> Result<(), RunLoopError> {
     env_logger::init();
     let Args { settings_file } = Args::parse();
+    loop {
+        log::info!("Creating watcher on Settings.json");
+        let (rx, _debouncer) = start_config_hot_reload()
+                .map_err(|e| {
+                    log::error!("{:?}", e);
+                    RunLoopError::StartAudioLoop
+                })?;
+        log::info!("Parsing config.");
+        let config: TurboAudioConfig = serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
+        log::info!("Starting audio loop.");
+        let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.jack, config.sample_rate)
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::StartAudioLoop
+            })?;
 
-    let config: TurboAudioConfig = serde_json::from_reader(&File::open(settings_file).unwrap()).unwrap();
-    let TurboAudioConfig {
-        device_name,
-        jack,
-        sample_rate,
-        stream_connections,
-    } = config;
+        log::info!("Creating pipewire listener.");
+        let pipewire_controller = PipewireController::new();
+        log::info!("Setting pipewire connections.");
+        pipewire_controller
+            .set_stream_connections(config.stream_connections.clone())
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::StartPipewireStream
+            })?;
 
-    let (_stream, audio_rx) = start_audio_loop(device_name, jack, sample_rate).map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::StartAudioLoop
-    })?;
-    let pipewire_controller = PipewireController::new();
-    log::info!("Eille");
-    pipewire_controller
-        .set_stream_connections(stream_connections)
-        .map_err(|e| {
-            log::error!("{:?}", e);
-            RunLoopError::StartPipewireStream
-        })?;
+        log::info!("Creating audio processor.");
+        let fft_buffer_size: usize = 1024;
+        let audio_processor =
+            AudioSignalProcessor::new(audio_rx, config.sample_rate, fft_buffer_size);
 
-    let fft_buffer_size: usize = 1024;
-    let audio_processor =
-        audio_processing::AudioSignalProcessor::new(audio_rx, sample_rate, fft_buffer_size);
+        log::info!("Loading config into controller.");
+        let controller = load_controller(&config, &audio_processor)
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::LoadConfigFile
+            })?;
 
-    test_and_run_loop(audio_processor)?;
-    Ok(())
+        log::info!("Starting run loop.");
+        run_loop(audio_processor, controller, &rx)?;
+    }
 }

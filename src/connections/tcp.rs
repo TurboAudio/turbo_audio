@@ -8,7 +8,7 @@ use std::{
 };
 
 pub struct TcpConnection {
-    data_queue: ring_channel::RingSender<Vec<u8>>,
+    data_queue: Option<ring_channel::RingSender<Vec<u8>>>,
     connection_thread: Option<JoinHandle<Result<(), TcpConnectionError>>>,
 }
 
@@ -26,13 +26,13 @@ impl TcpConnection {
     pub fn new(ip: std::net::SocketAddr) -> Self {
         let (tx, handle) = TcpConnection::start_connection_thread(ip);
         Self {
-            data_queue: tx,
+            data_queue: Some(tx),
             connection_thread: handle.into(),
         }
     }
 
     pub fn send_data(&mut self, packet: Vec<u8>) -> Result<(), SendError<Vec<u8>>> {
-        self.data_queue.send(packet).map(|_| ())
+        self.data_queue.as_mut().unwrap().send(packet).map(|_| ())
     }
 
     fn start_connection_thread(
@@ -67,12 +67,16 @@ impl TcpConnection {
                                 if let Err(e) = connection.write_all(&data) {
                                     disconnect_error = Some(e);
                                     // We break from this loop to allow reconnection to happen
+                                    log::info!("Lost connection with {ip}. Will attempt to reconnect.");
                                     break;
                                 }
                             }
                             // If an error occurs, the data_queue has no more sender
                             // and meaning the thread can exit correctly
-                            Err(_) => return Ok(()),
+                            Err(_) => {
+                                log::info!("Closing connection with {ip}.");
+                                return Ok(());
+                            }
                         }
                     }
                 }
@@ -108,11 +112,11 @@ impl TcpConnection {
 
 impl Drop for TcpConnection {
     fn drop(&mut self) {
-        if let Some(connection) = std::mem::replace(&mut self.connection_thread, None) {
-            if let Err(e) = connection.join() {
-                log::error!("Error in connection thread {:?}", e);
-            }
-            log::info!("Tcp connection thread joined.");
+        log::info!("Closing tcp connection");
+        drop(self.data_queue.take().unwrap());
+        if let Err(e) = self.connection_thread.take().unwrap().join() {
+            log::error!("Error in connection thread {:?}", e);
         }
+        log::info!("Tcp connection thread joined.");
     }
 }

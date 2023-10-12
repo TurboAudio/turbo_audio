@@ -16,7 +16,7 @@ pub struct Controller {
     connections: HashMap<usize, Connection>,
     led_strips: HashMap<usize, LedStrip>,
     led_strip_connections: HashMap<usize, usize>,
-    pub lua_effects_registry: HashMap<String, usize>,
+    pub lua_effects_registry: HashMap<String, Vec<usize>>,
 }
 
 impl Controller {
@@ -26,8 +26,14 @@ impl Controller {
 
     pub fn add_effect(&mut self, id: usize, effect: Effect) {
         if let Effect::Lua(lua_effect) = &effect {
-            self.lua_effects_registry
-                .insert(lua_effect.get_filename().to_owned(), id);
+            log::info!("Added lua effect to registry: (id: {id})");
+            let lua_file_name = lua_effect.get_filename().to_owned();
+            match self.lua_effects_registry.get_mut(&lua_file_name) {
+                Some(lua_effects) => lua_effects.push(id),
+                None => {
+                    self.lua_effects_registry.insert(lua_file_name, vec![id]);
+                }
+            }
         }
         self.effects.insert(id, effect);
     }
@@ -36,8 +42,13 @@ impl Controller {
         self.settings.insert(id, settings);
     }
 
-    pub fn link_effect_to_settings(&mut self, effect_id: usize, settings_id: usize) {
-        self.effect_settings.insert(effect_id, settings_id);
+    pub fn link_effect_to_settings(&mut self, effect_id: usize, settings_id: usize) -> bool {
+        if self.settings.contains_key(&settings_id) {
+            self.effect_settings.insert(effect_id, settings_id);
+            true
+        } else {
+            false
+        }
     }
 
     pub fn add_connection(&mut self, connection_id: usize, connection: Connection) {
@@ -48,9 +59,14 @@ impl Controller {
         self.led_strips.insert(led_strip_id, led_strip);
     }
 
-    pub fn link_led_strip_to_connection(&mut self, led_strip_id: usize, connection_id: usize) {
-        self.led_strip_connections
-            .insert(led_strip_id, connection_id);
+    pub fn link_led_strip_to_connection(&mut self, led_strip_id: usize, connection_id: usize) -> bool {
+        if self.connections.contains_key(&connection_id) {
+            self.led_strip_connections
+                .insert(led_strip_id, connection_id);
+            true
+        } else {
+            false
+        }
     }
 
     pub fn update_led_strips(&mut self) {
