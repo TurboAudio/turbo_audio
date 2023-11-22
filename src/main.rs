@@ -1,13 +1,11 @@
 mod audio;
-mod audio_processing;
 mod config_parser;
 mod connections;
 mod controller;
 mod hot_reload;
-mod pipewire_listener;
 mod resources;
 
-use audio_processing::AudioSignalProcessor;
+use audio::audio_processing::AudioSignalProcessor;
 use controller::Controller;
 use hot_reload::{
     check_lua_files_changed, start_config_hot_reload, start_hot_reload_lua_effects,
@@ -20,11 +18,11 @@ use resources::effects::{
 };
 use std::{fs::File, sync::mpsc::TryRecvError};
 
-use audio::start_audio_loop;
+use audio::audio_stream::start_audio_loop;
+use audio::pipewire_listener::PipewireController;
 use clap::Parser;
 use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, TurboAudioConfig};
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
-use pipewire_listener::PipewireController;
 
 use crate::resources::{effects::Effect, ledstrip::LedStrip, settings::Settings};
 #[derive(Parser, Debug)]

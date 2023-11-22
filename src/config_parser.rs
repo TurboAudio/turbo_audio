@@ -1,4 +1,4 @@
-use crate::pipewire_listener::StreamConnections;
+use crate::audio::pipewire_listener::StreamConnections;
 use crate::resources::color::Color;
 use serde::{Deserialize, Serialize};
 

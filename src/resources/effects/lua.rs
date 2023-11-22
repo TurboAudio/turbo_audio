@@ -1,5 +1,6 @@
 use crate::{
-    audio_processing::AudioSignalProcessor, audio_processing::FftResult, resources::color::Color,
+    audio::{audio_processing::AudioSignalProcessor, audio_processing::FftResult},
+    resources::color::Color,
 };
 use jsonschema::JSONSchema;
 use mlua::{Error, Function, Lua, LuaSerdeExt, Table, Value};
