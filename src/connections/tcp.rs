@@ -43,13 +43,13 @@ impl TcpConnection {
     ) {
         let buffer_size: NonZeroUsize = NonZeroUsize::new(64).unwrap();
         let (tx, mut rx) = ring_channel::<Vec<u8>>(buffer_size);
-        let connection_thread =
-            thread::spawn(move || -> Result<(), TcpConnectionError> {
-                let mut disconnect_error = None;
-                // This loop essures we keep reconnecting if possible
-                loop {
-                    let mut connection = TcpConnection::attempt_connection(ip, None, None)
-                        .map_err(|attempt_error| match disconnect_error {
+        let connection_thread = thread::spawn(move || -> Result<(), TcpConnectionError> {
+            let mut disconnect_error = None;
+            // This loop essures we keep reconnecting if possible
+            loop {
+                let mut connection =
+                    TcpConnection::attempt_connection(ip, None, None).map_err(|attempt_error| {
+                        match disconnect_error {
                             Some(disconnect_error) => {
                                 // This error comes from the last disconnect
                                 TcpConnectionError::UnableToReconnect(
@@ -58,29 +58,30 @@ impl TcpConnection {
                                 )
                             }
                             None => TcpConnectionError::ConnectionFailed(attempt_error),
-                        })?;
+                        }
+                    })?;
 
-                    // This loop sends the packets in data_queue through the TCP socket
-                    loop {
-                        match rx.recv() {
-                            Ok(data) => {
-                                if let Err(e) = connection.write_all(&data) {
-                                    disconnect_error = Some(e);
-                                    // We break from this loop to allow reconnection to happen
-                                    log::info!("Lost connection with {ip}. Will attempt to reconnect.");
-                                    break;
-                                }
+                // This loop sends the packets in data_queue through the TCP socket
+                loop {
+                    match rx.recv() {
+                        Ok(data) => {
+                            if let Err(e) = connection.write_all(&data) {
+                                disconnect_error = Some(e);
+                                // We break from this loop to allow reconnection to happen
+                                log::info!("Lost connection with {ip}. Will attempt to reconnect.");
+                                break;
                             }
-                            // If an error occurs, the data_queue has no more sender
-                            // and meaning the thread can exit correctly
-                            Err(_) => {
-                                log::info!("Closing connection with {ip}.");
-                                return Ok(());
-                            }
+                        }
+                        // If an error occurs, the data_queue has no more sender
+                        // and meaning the thread can exit correctly
+                        Err(_) => {
+                            log::info!("Closing connection with {ip}.");
+                            return Ok(());
                         }
                     }
                 }
-            });
+            }
+        });
 
         (tx, connection_thread)
     }

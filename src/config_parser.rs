@@ -1,5 +1,5 @@
-use crate::resources::color::Color;
 use crate::pipewire_listener::StreamConnections;
+use crate::resources::color::Color;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,7 +26,7 @@ pub enum ConnectionConfigType {
 pub struct EffectConfig {
     pub effect_id: usize,
     pub settings_id: usize,
-    pub effect: EffectConfigType
+    pub effect: EffectConfigType,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -67,4 +67,3 @@ pub struct TurboAudioConfig {
     pub devices: Vec<DeviceConfig>,
     pub ledstrips: Vec<LedstripConfig>,
 }
-

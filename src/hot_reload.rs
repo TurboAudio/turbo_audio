@@ -27,7 +27,8 @@ pub fn start_hot_reload_lua_effects(
     Ok((rx, debouncer))
 }
 
-pub fn start_config_hot_reload() -> Result<(HotReloadReceiver, Debouncer<RecommendedWatcher>), Error> {
+pub fn start_config_hot_reload() -> Result<(HotReloadReceiver, Debouncer<RecommendedWatcher>), Error>
+{
     let (tx, rx) = std::sync::mpsc::channel();
     let mut debouncer = new_debouncer(std::time::Duration::from_millis(50), None, tx).unwrap();
 

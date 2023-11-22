@@ -59,7 +59,11 @@ impl Controller {
         self.led_strips.insert(led_strip_id, led_strip);
     }
 
-    pub fn link_led_strip_to_connection(&mut self, led_strip_id: usize, connection_id: usize) -> bool {
+    pub fn link_led_strip_to_connection(
+        &mut self,
+        led_strip_id: usize,
+        connection_id: usize,
+    ) -> bool {
         if self.connections.contains_key(&connection_id) {
             self.led_strip_connections
                 .insert(led_strip_id, connection_id);
