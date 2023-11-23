@@ -191,20 +191,6 @@ fn main() -> Result<(), RunLoopError> {
     env_logger::init();
     let Args { settings_file } = Args::parse();
 
-    // unsafe {
-    //     loop {
-    //         let lib = libloading::Library::new(
-    //             "rust_effects/projects/random_effect/target/debug/librandom_effect.so",
-    //         )
-    //         .unwrap();
-    //         let func: libloading::Symbol<fn() -> ()> = lib.get(b"talk").unwrap();
-    //         func();
-    //         lib.close().unwrap();
-    //     }
-    // }
-
-    // return Ok(());
-
     loop {
         log::info!("Creating watcher on Settings.json");
         let (rx, _debouncer) = start_config_hot_reload().map_err(|e| {
