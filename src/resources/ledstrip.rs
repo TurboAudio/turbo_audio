@@ -21,7 +21,7 @@ impl LedStrip {
         }
         self.effects
             .retain(|(effect_id, _interval)| !to_remove.contains(effect_id));
-        self.colors.resize(size, Color::new());
+        self.colors.resize(size, Color::default());
     }
 
     pub fn add_effect(&mut self, effect_id: usize, size: usize) -> bool {
