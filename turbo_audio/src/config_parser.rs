@@ -62,7 +62,6 @@ pub struct DeviceConfig {
 pub struct TurboAudioConfig {
     pub lua_effects_folder: PathBuf,
     pub device_name: Option<String>,
-    pub jack: bool,
     pub sample_rate: u32,
     pub stream_connections: Vec<StreamConnections>,
     pub effect_settings: Vec<EffectSettingConfig>,

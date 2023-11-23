@@ -201,13 +201,11 @@ fn main() -> Result<(), RunLoopError> {
         let config: TurboAudioConfig =
             serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
         log::info!("Starting audio loop.");
-        let (_stream, audio_rx) =
-            start_audio_loop(config.device_name.clone(), config.jack, config.sample_rate).map_err(
-                |e| {
-                    log::error!("{:?}", e);
-                    RunLoopError::StartAudioLoop
-                },
-            )?;
+        let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.sample_rate)
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::StartAudioLoop
+            })?;
 
         log::info!("Creating pipewire listener.");
         let pipewire_controller = PipewireController::new();

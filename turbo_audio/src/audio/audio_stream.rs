@@ -1,15 +1,16 @@
 use anyhow::Context;
 use cpal::traits::{DeviceTrait, HostTrait};
-use cpal::{Device, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig};
+use cpal::{
+    Device, FromSample, InputCallbackInfo, SampleFormat, StreamConfig, SupportedStreamConfig,
+};
 use retry::{delay::Exponential, retry_with_index};
 use ringbuf::{HeapConsumer, HeapProducer};
 
 pub fn start_audio_loop(
     device_name: Option<String>,
-    use_jack: bool,
     sample_rate: u32,
 ) -> anyhow::Result<(cpal::Stream, HeapConsumer<f32>)> {
-    let audio_device = get_audio_device(device_name, use_jack);
+    let audio_device = get_audio_device(device_name);
     let input_config = get_input_config(&audio_device, sample_rate);
     let sample_format = input_config.sample_format();
     let config: StreamConfig = input_config.into();
@@ -36,18 +37,8 @@ pub fn start_audio_loop(
     .with_context(|| "Failed to start stream")
 }
 
-fn get_audio_device(device_name: Option<String>, use_jack: bool) -> Device {
-    let host = if use_jack {
-        cpal::host_from_id(
-            cpal::available_hosts()
-                .into_iter()
-                .find(|id| *id == cpal::HostId::Jack)
-                .expect("jack host unavailable"),
-        )
-        .expect("jack host unavailable")
-    } else {
-        cpal::default_host()
-    };
+fn get_audio_device(device_name: Option<String>) -> Device {
+    let host = cpal::default_host();
 
     match device_name {
         Some(device_name) => host
@@ -70,11 +61,14 @@ fn get_input_config(audio_device: &Device, sample_rate: u32) -> SupportedStreamC
         .with_sample_rate(cpal::SampleRate(sample_rate))
 }
 
-fn build_audio_stream<T: cpal::Sample>(
+fn build_audio_stream<T: cpal::Sample + cpal::SizedSample>(
     audio_device: &Device,
     config: &StreamConfig,
     mut tx: HeapProducer<f32>,
-) -> Result<cpal::Stream, cpal::BuildStreamError> {
+) -> Result<cpal::Stream, cpal::BuildStreamError>
+where
+    f32: FromSample<T>,
+{
     let err_fn = |err| {
         panic!("ERROR: {err:?}");
     };
@@ -83,10 +77,11 @@ fn build_audio_stream<T: cpal::Sample>(
         config,
         move |data: &[T], _: &InputCallbackInfo| {
             for point in data {
-                let _ = tx.push(point.to_f32());
+                let _ = tx.push(point.to_sample::<f32>());
             }
         },
         err_fn,
+        None,
     )
 }
 
@@ -100,6 +95,9 @@ fn start_stream(
         SampleFormat::U16 => build_audio_stream::<u16>(audio_device, config, tx),
         SampleFormat::I16 => build_audio_stream::<i16>(audio_device, config, tx),
         SampleFormat::F32 => build_audio_stream::<f32>(audio_device, config, tx),
+        _ => {
+            unimplemented!()
+        }
     }?;
 
     Ok((stream, rx))
