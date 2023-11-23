@@ -126,15 +126,14 @@ impl Controller {
             .retain(|ledstrip_id, connection_id| {
                 if let Some(ledstrip) = self.led_strips.get(ledstrip_id) {
                     if let Some(connection) = self.connections.get_mut(connection_id) {
-                        let data = ledstrip
-                            .colors
-                            .iter()
-                            .flat_map(|color| color.to_bytes())
-                            .collect::<Vec<_>>();
+                        let data: &[u8] = bytemuck::cast_slice(ledstrip.colors.as_slice());
+
+                        assert!(data.len() == ledstrip.colors.len() * 3);
+
                         match connection {
                             Connection::Tcp(tcp_connection) => {
                                 // If send fails, connection is closed.
-                                if let Err(error) = tcp_connection.send_data(data) {
+                                if let Err(error) = tcp_connection.send_data(data.to_vec()) {
                                     log::error!("{:?}", error);
                                     self.connections.remove(connection_id);
                                     return false;
