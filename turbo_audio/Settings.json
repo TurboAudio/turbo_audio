@@ -1,4 +1,5 @@
 {
+  "lua_effects_folder": "../effects/lua/",
   "device_name": null,
   "jack": false,
   "sample_rate": 48000,
@@ -35,7 +36,7 @@
             "effect_id": 1,
             "settings_id": 1,
             "effect" : {
-                "Lua": "scripts/sketchers.lua"
+                "Lua": "sketchers.lua"
             }
         }
     ],

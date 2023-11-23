@@ -5,7 +5,7 @@ use crate::{
     },
     Connection, Effect, Settings,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Default)]
 #[allow(unused)]
@@ -16,7 +16,7 @@ pub struct Controller {
     connections: HashMap<usize, Connection>,
     led_strips: HashMap<usize, LedStrip>,
     led_strip_connections: HashMap<usize, usize>,
-    pub lua_effects_registry: HashMap<String, Vec<usize>>,
+    pub lua_effects_registry: HashMap<PathBuf, Vec<usize>>,
 }
 
 impl Controller {
@@ -27,7 +27,7 @@ impl Controller {
     pub fn add_effect(&mut self, id: usize, effect: Effect) {
         if let Effect::Lua(lua_effect) = &effect {
             log::info!("Added lua effect to registry: (id: {id})");
-            let lua_file_name = lua_effect.get_filename().to_owned();
+            let lua_file_name = std::fs::canonicalize(lua_effect.get_path()).unwrap();
             match self.lua_effects_registry.get_mut(&lua_file_name) {
                 Some(lua_effects) => lua_effects.push(id),
                 None => {
@@ -121,6 +121,7 @@ impl Controller {
             }
         }
     }
+
     pub fn send_ledstrip_colors(&mut self) {
         self.led_strip_connections
             .retain(|ledstrip_id, connection_id| {

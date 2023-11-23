@@ -1,4 +1,4 @@
-require("scripts.libs.framework")
+require("libs.framework")
 
 SettingsSchema = {
 	title = "TurboSettings",

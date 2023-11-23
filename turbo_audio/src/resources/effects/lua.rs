@@ -6,6 +6,8 @@ use jsonschema::JSONSchema;
 use mlua::{Error, Function, Lua, LuaSerdeExt, Table, Value};
 use std::{
     fs,
+    os::unix::prelude::OsStrExt,
+    path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 
@@ -33,7 +35,7 @@ pub enum LuaEffectRuntimeError {
 #[allow(unused)]
 #[derive(Debug)]
 pub struct LuaEffect {
-    filename: String,
+    path: PathBuf,
     lua: Lua,
     json_schema: String,
     compiled_json_schema: JSONSchema,
@@ -87,21 +89,23 @@ impl mlua::UserData for LuaFftResult {
 
 impl LuaEffect {
     pub fn new(
-        filename: &str,
+        effect_path: impl AsRef<Path>,
+        package_root: impl AsRef<Path>,
         audio_processor: &AudioSignalProcessor,
     ) -> Result<Self, LuaEffectLoadError> {
+        log::info!("Loading lua effect: {}", effect_path.as_ref().display());
         let (lua, json_schema, compiled_json_schema) =
-            Self::get_lua_effect(filename, audio_processor)?;
+            Self::load_lua_effect(&effect_path, &package_root, audio_processor)?;
         Ok(Self {
-            filename: filename.to_string(),
+            path: effect_path.as_ref().to_path_buf(),
             lua,
             json_schema,
             compiled_json_schema,
         })
     }
 
-    pub fn get_filename(&self) -> &str {
-        &self.filename
+    pub fn get_path(&self) -> impl AsRef<Path> + '_ {
+        &self.path
     }
 
     pub fn tick(
@@ -169,12 +173,32 @@ impl LuaEffect {
         Ok(())
     }
 
-    fn get_lua_effect(
-        filename: &str,
+    fn load_lua_effect(
+        path: impl AsRef<Path>,
+        package_path: impl AsRef<Path>,
         audio_processor: &AudioSignalProcessor,
     ) -> Result<(Lua, String, JSONSchema), LuaEffectLoadError> {
-        let lua_src = fs::read_to_string(filename).map_err(LuaEffectLoadError::File)?;
+        let lua_src = fs::read_to_string(path).map_err(LuaEffectLoadError::File)?;
         let lua = Lua::new();
+
+        {
+            // Add our package path to lua's package path so that it can find the libraries
+            let package = lua.globals().get::<_, mlua::Table>("package").unwrap();
+            let path = package.get::<_, mlua::String>("path").unwrap();
+            let mut new_str = Vec::from(path.as_bytes());
+            new_str.extend_from_slice(b";");
+            new_str.extend_from_slice(package_path.as_ref().as_os_str().as_bytes());
+            if new_str.last() != Some(&b'/') {
+                new_str.extend_from_slice(b"/");
+            }
+            new_str.extend_from_slice(b"?.lua");
+            package
+                .set("path", lua.create_string(&new_str).unwrap())
+                .unwrap(); // Append the new search path to package.path
+
+            lua.globals().set("package", package).unwrap(); // Update the package
+        }
+
         lua.load(&lua_src).exec().map_err(LuaEffectLoadError::Lua)?;
         let schema = Self::get_lua_schema(&lua)?;
         let compiled_schema = JSONSchema::compile(&schema)

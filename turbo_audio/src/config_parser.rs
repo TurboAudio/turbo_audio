@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::audio::pipewire_listener::StreamConnections;
 use crate::resources::color::Color;
 use serde::{Deserialize, Serialize};
@@ -58,6 +60,7 @@ pub struct DeviceConfig {
 #[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TurboAudioConfig {
+    pub lua_effects_folder: PathBuf,
     pub device_name: Option<String>,
     pub jack: bool,
     pub sample_rate: u32,
