@@ -17,7 +17,6 @@ dasp_signal = "0.11.0"
 dasp_window = { version = "0.11.0", features = ["hanning"]}
 env_logger = "0.10.0"
 jsonschema = "0.16.1"
-libloading = "0.8.1"
 log = "0.4.17"
 mlua = { version = "0.8.6", features = ["luajit52", "vendored", "async", "send", "serialize"] }
 notify-debouncer-mini = { version = "0.2.1" }
