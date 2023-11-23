@@ -20,46 +20,46 @@
         ]
       }
     }
-    ],
-    "effect_settings": [
-        {
-            "setting": {
-                "Lua": {
-                    "settings": {}
-                }
-            },
-            "id": 1
+  ],
+  "effect_settings": [
+    {
+      "setting": {
+        "Lua": {
+          "settings": {}
         }
-    ],
-    "effects": [
+      },
+      "id": 1
+    }
+  ],
+  "effects": [
+    {
+      "effect_id": 1,
+      "settings_id": 1,
+      "effect": {
+        "Lua": "sketchers.lua"
+      }
+    }
+  ],
+  "devices": [
+    {
+      "type": "Tcp",
+      "connection": {
+        "Tcp": "192.168.0.164:1234"
+      },
+      "id": 1
+    }
+  ],
+  "ledstrips": [
+    {
+      "id": 1,
+      "connection_id": 1,
+      "size": 300,
+      "effects": [
         {
-            "effect_id": 1,
-            "settings_id": 1,
-            "effect" : {
-                "Lua": "sketchers.lua"
-            }
+          "effect_id": 1,
+          "effect_size": 300
         }
-    ],
-    "devices": [
-        {
-            "type": "Tcp",
-            "connection": {
-                "Tcp": "192.168.0.164:1234"
-            },
-            "id": 1
-        }
-    ],
-    "ledstrips": [
-        {
-            "id": 1,
-            "connection_id": 1,
-            "size": 300,
-            "effects": [
-                {
-                    "effect_id": 1,
-                    "effect_size": 300
-                }
-            ]
-        }
-    ]
+      ]
+    }
+  ]
 }
