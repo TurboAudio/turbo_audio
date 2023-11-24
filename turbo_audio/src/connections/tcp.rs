@@ -42,7 +42,7 @@ impl TcpConnection {
         JoinHandle<Result<(), TcpConnectionError>>,
     ) {
         let buffer_size: NonZeroUsize = NonZeroUsize::new(64).unwrap();
-        let (tx, mut rx) = ring_channel::<Vec<u8>>(buffer_size);
+        let (tx, rx) = ring_channel::<Vec<u8>>(buffer_size);
         let connection_thread = thread::spawn(move || -> Result<(), TcpConnectionError> {
             let mut disconnect_error = None;
             // This loop essures we keep reconnecting if possible

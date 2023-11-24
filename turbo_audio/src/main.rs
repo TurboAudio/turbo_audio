@@ -76,7 +76,7 @@ fn run_loop(
         if let Some(hot_reload_rx) = &hot_reload_rx {
             check_lua_files_changed(
                 &lua_effects_folder,
-                &hot_reload_rx,
+                hot_reload_rx,
                 &mut controller.effects,
                 &controller.lua_effects_registry,
                 &audio_processor,
