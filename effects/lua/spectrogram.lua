@@ -1,5 +1,5 @@
-require("scripts.libs.framework")
-require("scripts.libs.colors")
+require("libs.framework")
+require("libs.colors")
 
 SettingsSchema = {}
 
