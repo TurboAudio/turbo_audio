@@ -1,0 +1,64 @@
+{
+  "lua_effects_folder": "../effects/lua/",
+  "device_name": null,
+  "sample_rate": 48000,
+  "stream_connections": [
+    {
+      "output_stream": "spotify",
+      "input_stream": "ALSA plug-in [turbo_audio]",
+      "port_connections": {
+        "Only": [
+          [
+            "output_FL",
+            "input_FL"
+          ],
+          [
+            "output_FR",
+            "input_FR"
+          ]
+        ]
+      }
+    }
+  ],
+  "effect_settings": [
+    {
+      "setting": {
+        "Lua": {
+          "settings": {}
+        }
+      },
+      "id": 1
+    }
+  ],
+  "effects": [
+    {
+      "effect_id": 1,
+      "settings_id": 1,
+      "effect": {
+        "Lua": "sketchers.lua"
+      }
+    }
+  ],
+  "devices": [
+    {
+      "type": "Tcp",
+      "connection": {
+        "Tcp": "192.168.0.164:1234"
+      },
+      "id": 1
+    }
+  ],
+  "ledstrips": [
+    {
+      "id": 1,
+      "connection_id": 1,
+      "size": 300,
+      "effects": [
+        {
+          "effect_id": 1,
+          "effect_size": 300
+        }
+      ]
+    }
+  ]
+}

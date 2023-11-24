@@ -16,7 +16,7 @@ use resources::effects::{
     moody::{Moody, MoodySettings},
     raindrop::{RaindropSettings, RaindropState, Raindrops},
 };
-use std::{fs::File, sync::mpsc::TryRecvError};
+use std::{fs::File, path::Path, sync::mpsc::TryRecvError};
 
 use audio::audio_stream::start_audio_loop;
 use audio::pipewire_listener::PipewireController;
@@ -43,12 +43,16 @@ enum RunLoopError {
 fn run_loop(
     mut audio_processor: AudioSignalProcessor,
     mut controller: Controller,
+    lua_effects_folder: impl AsRef<Path>,
     reload_config_rx: &HotReloadReceiver,
 ) -> Result<(), RunLoopError> {
-    if let Err(e) = start_hot_reload_lua_effects() {
-        log::error!("Hot reload may not be active: {e:?}");
-    }
-    let (hot_reload_rx, _debouncer) = start_hot_reload_lua_effects().unwrap();
+    let (hot_reload_rx, _debouncer) = match start_hot_reload_lua_effects(&lua_effects_folder) {
+        Err(e) => {
+            log::error!("Hot reload may not be active: {e:?}");
+            (None, None)
+        }
+        Ok((hot_reload_rx, debouncer)) => (Some(hot_reload_rx), Some(debouncer)),
+    };
 
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
@@ -69,12 +73,15 @@ fn run_loop(
         controller.update_led_strips();
         controller.send_ledstrip_colors();
 
-        check_lua_files_changed(
-            &hot_reload_rx,
-            &mut controller.effects,
-            &controller.lua_effects_registry,
-            &audio_processor,
-        );
+        if let Some(hot_reload_rx) = &hot_reload_rx {
+            check_lua_files_changed(
+                &lua_effects_folder,
+                hot_reload_rx,
+                &mut controller.effects,
+                &controller.lua_effects_registry,
+                &audio_processor,
+            );
+        }
 
         match reload_config_rx.try_recv() {
             Ok(_) => return Ok(()),
@@ -96,6 +103,7 @@ enum LoadControllerError {
 fn load_controller(
     config: &TurboAudioConfig,
     audio_processor: &AudioSignalProcessor,
+    lua_effects_foler: impl AsRef<Path>,
 ) -> Result<Controller, LoadControllerError> {
     let mut controller = Controller::new();
     for connection_config in config.devices.iter() {
@@ -134,10 +142,15 @@ fn load_controller(
 
     for effect_settings in config.effects.iter() {
         match &effect_settings.effect {
-            EffectConfigType::Lua(file_name) => controller.add_effect(
-                effect_settings.effect_id,
-                Effect::Lua(LuaEffect::new(file_name.as_str(), audio_processor).unwrap()),
-            ),
+            EffectConfigType::Lua(file_name) => {
+                let effect_path = lua_effects_foler.as_ref().to_owned().join(file_name);
+                controller.add_effect(
+                    effect_settings.effect_id,
+                    Effect::Lua(
+                        LuaEffect::new(effect_path, &lua_effects_foler, audio_processor).unwrap(),
+                    ),
+                )
+            }
             EffectConfigType::Moody() => {
                 controller.add_effect(effect_settings.effect_id, Effect::Moody(Moody {}))
             }
@@ -177,6 +190,7 @@ fn load_controller(
 fn main() -> Result<(), RunLoopError> {
     env_logger::init();
     let Args { settings_file } = Args::parse();
+
     loop {
         log::info!("Creating watcher on Settings.json");
         let (rx, _debouncer) = start_config_hot_reload().map_err(|e| {
@@ -187,13 +201,11 @@ fn main() -> Result<(), RunLoopError> {
         let config: TurboAudioConfig =
             serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
         log::info!("Starting audio loop.");
-        let (_stream, audio_rx) =
-            start_audio_loop(config.device_name.clone(), config.jack, config.sample_rate).map_err(
-                |e| {
-                    log::error!("{:?}", e);
-                    RunLoopError::StartAudioLoop
-                },
-            )?;
+        let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.sample_rate)
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::StartAudioLoop
+            })?;
 
         log::info!("Creating pipewire listener.");
         let pipewire_controller = PipewireController::new();
@@ -211,12 +223,13 @@ fn main() -> Result<(), RunLoopError> {
             AudioSignalProcessor::new(audio_rx, config.sample_rate, fft_buffer_size);
 
         log::info!("Loading config into controller.");
-        let controller = load_controller(&config, &audio_processor).map_err(|e| {
-            log::error!("{:?}", e);
-            RunLoopError::LoadConfigFile
-        })?;
+        let controller = load_controller(&config, &audio_processor, &config.lua_effects_folder)
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::LoadConfigFile
+            })?;
 
         log::info!("Starting run loop.");
-        run_loop(audio_processor, controller, &rx)?;
+        run_loop(audio_processor, controller, &config.lua_effects_folder, &rx)?;
     }
 }
