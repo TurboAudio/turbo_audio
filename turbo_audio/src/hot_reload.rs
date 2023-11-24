@@ -17,13 +17,14 @@ use std::{
     sync::mpsc::Receiver,
 };
 
-pub type HotReloadReceiver = Receiver<Result<Vec<DebouncedEvent>, Vec<Error>>>;
+pub type HotReloadReceiver =
+    Receiver<Result<Vec<DebouncedEvent>, notify_debouncer_mini::notify::Error>>;
 
 pub fn start_hot_reload_lua_effects(
     lua_effects_folder: impl AsRef<Path>,
 ) -> Result<(HotReloadReceiver, Debouncer<RecommendedWatcher>), Error> {
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut debouncer = new_debouncer(std::time::Duration::from_millis(50), None, tx).unwrap();
+    let mut debouncer = new_debouncer(std::time::Duration::from_millis(50), tx).unwrap();
 
     debouncer
         .watcher()
@@ -35,7 +36,7 @@ pub fn start_hot_reload_lua_effects(
 pub fn start_config_hot_reload() -> Result<(HotReloadReceiver, Debouncer<RecommendedWatcher>), Error>
 {
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut debouncer = new_debouncer(std::time::Duration::from_millis(50), None, tx).unwrap();
+    let mut debouncer = new_debouncer(std::time::Duration::from_millis(50), tx).unwrap();
 
     debouncer
         .watcher()

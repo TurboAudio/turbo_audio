@@ -91,12 +91,14 @@ fn start_stream(
     sample_format: &SampleFormat,
 ) -> Result<(cpal::Stream, HeapConsumer<f32>), cpal::BuildStreamError> {
     let (tx, rx) = ringbuf::HeapRb::<f32>::new(1024).split();
+    log::info!("Starting audio stream with format: {sample_format}");
     let stream = match sample_format {
+        SampleFormat::U8 => build_audio_stream::<u8>(audio_device, config, tx),
         SampleFormat::U16 => build_audio_stream::<u16>(audio_device, config, tx),
         SampleFormat::I16 => build_audio_stream::<i16>(audio_device, config, tx),
         SampleFormat::F32 => build_audio_stream::<f32>(audio_device, config, tx),
-        _ => {
-            unimplemented!()
+        format => {
+            panic!("Unimplemented format: {format}");
         }
     }?;
 
