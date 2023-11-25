@@ -1,0 +1,21 @@
+[tasks.mkdir]
+command = "mkdir"
+args = ["-p", "../../bin"]
+
+[tasks.build-debug]
+command = "cargo"
+args = ["build"]
+
+[tasks.install-debug]
+command = "cp"
+args = ["target/debug/libsoin.so", "../../bin"]
+dependencies = ["build-debug", "mkdir"]
+
+[tasks.build-release]
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.install-release]
+command = "cp"
+args = ["target/release/libsoin.so",  "../../bin"]
+dependencies = ["build-release", "mkdir"]
