@@ -1,13 +1,13 @@
 use crate::{
     effects::native::NativeEffectManager, resources::ledstrip::LedStrip, Connection, Effect,
-    Settings,
+    EffectSettings,
 };
 use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Default)]
 #[allow(unused)]
 pub struct Controller {
-    settings: HashMap<usize, Settings>,
+    settings: HashMap<usize, EffectSettings>,
     pub effects: Option<HashMap<usize, Effect>>,
     effect_settings: HashMap<usize, usize>,
     connections: HashMap<usize, Connection>,
@@ -52,7 +52,7 @@ impl Controller {
         self.effects.as_mut().unwrap().insert(id, effect);
     }
 
-    pub fn add_settings(&mut self, id: usize, settings: Settings) {
+    pub fn add_settings(&mut self, id: usize, settings: EffectSettings) {
         self.settings.insert(id, settings);
     }
 
@@ -119,12 +119,12 @@ impl Controller {
 
                 let setting = self.settings.get(setting_id);
                 match (effect, setting) {
-                    (Effect::Lua(lua), Some(Settings::Lua(settings))) => {
+                    (Effect::Lua(lua), Some(EffectSettings::Lua(settings))) => {
                         if let Err(e) = lua.tick(leds, settings) {
                             log::error!("Error when executing lua function: {:?}", e);
                         }
                     }
-                    (Effect::Native(native), Some(Settings::Native(_settings))) => {
+                    (Effect::Native(native), Some(EffectSettings::Native(_settings))) => {
                         native.tick().unwrap();
                     }
                     _ => panic!("Effect doesn't match settings"),

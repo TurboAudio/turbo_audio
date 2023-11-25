@@ -15,7 +15,7 @@ use controller::Controller;
 use effects::{
     lua::{LuaEffect, LuaEffectSettings},
     native::NativeEffectSettings,
-    Effect, Settings,
+    Effect, EffectSettings,
 };
 use hot_reload::{
     check_lua_files_changed, start_config_hot_reload, start_hot_reload_lua_effects,
@@ -122,12 +122,14 @@ fn load_controller(
         match &setting_config.setting {
             SettingsConfigType::Lua(settings) => controller.add_settings(
                 setting_config.id,
-                Settings::Lua(LuaEffectSettings {
+                EffectSettings::Lua(LuaEffectSettings {
                     settings: settings.clone(),
                 }),
             ),
-            SettingsConfigType::Native => controller
-                .add_settings(setting_config.id, Settings::Native(NativeEffectSettings {})),
+            SettingsConfigType::Native => controller.add_settings(
+                setting_config.id,
+                EffectSettings::Native(NativeEffectSettings {}),
+            ),
         }
     }
 

@@ -13,7 +13,7 @@ pub enum Effect {
 }
 
 #[derive(Debug)]
-pub enum Settings {
+pub enum EffectSettings {
     Lua(LuaEffectSettings),
     Native(NativeEffectSettings),
 }
