@@ -13,15 +13,9 @@ use hot_reload::{
 };
 use resources::effects::{
     lua::{LuaEffect, LuaEffectSettings},
-    moody::{Moody, MoodySettings},
     native::NativeEffectSettings,
-    raindrop::{RaindropSettings, RaindropState, Raindrops},
 };
-use std::{
-    fs::File,
-    path::{Path, PathBuf},
-    sync::mpsc::TryRecvError,
-};
+use std::{fs::File, path::Path, sync::mpsc::TryRecvError};
 
 use audio::audio_stream::start_audio_loop;
 use audio::pipewire_listener::PipewireController;
@@ -133,17 +127,6 @@ fn load_controller(
             ),
             SettingsConfigType::Native => controller
                 .add_settings(setting_config.id, Settings::Native(NativeEffectSettings {})),
-            SettingsConfigType::Moody(color) => controller.add_settings(
-                setting_config.id,
-                Settings::Moody(MoodySettings { color: *color }),
-            ),
-            SettingsConfigType::Raindrop => controller.add_settings(
-                setting_config.id,
-                Settings::Raindrop(RaindropSettings {
-                    rain_speed: 1,
-                    drop_rate: 0.5,
-                }),
-            ),
         }
     }
 
@@ -166,15 +149,6 @@ fn load_controller(
                     .unwrap();
                 controller.add_effect(effect_settings.effect_id, Effect::Native(effect))
             }
-            EffectConfigType::Moody => {
-                controller.add_effect(effect_settings.effect_id, Effect::Moody(Moody {}))
-            }
-            EffectConfigType::Raindrop => controller.add_effect(
-                effect_settings.effect_id,
-                Effect::Raindrop(Raindrops {
-                    state: RaindropState { riples: vec![] },
-                }),
-            ),
         }
         if !controller
             .link_effect_to_settings(effect_settings.effect_id, effect_settings.settings_id)

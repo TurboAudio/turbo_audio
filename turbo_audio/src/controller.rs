@@ -1,8 +1,5 @@
 use crate::{
-    resources::{
-        effects::{moody::update_moody, native::NativeEffectManager, raindrop::update_raindrop},
-        ledstrip::LedStrip,
-    },
+    resources::{effects::native::NativeEffectManager, ledstrip::LedStrip},
     Connection, Effect, Settings,
 };
 use std::{collections::HashMap, path::PathBuf};
@@ -122,12 +119,6 @@ impl Controller {
 
                 let setting = self.settings.get(setting_id);
                 match (effect, setting) {
-                    (Effect::Moody(_moody), Some(Settings::Moody(settings))) => {
-                        update_moody(leds, settings);
-                    }
-                    (Effect::Raindrop(raindrop), Some(Settings::Raindrop(settings))) => {
-                        update_raindrop(leds, settings, &mut raindrop.state);
-                    }
                     (Effect::Lua(lua), Some(Settings::Lua(settings))) => {
                         if let Err(e) = lua.tick(leds, settings) {
                             log::error!("Error when executing lua function: {:?}", e);
