@@ -14,9 +14,14 @@ use hot_reload::{
 use resources::effects::{
     lua::{LuaEffect, LuaEffectSettings},
     moody::{Moody, MoodySettings},
+    native::NativeEffectSettings,
     raindrop::{RaindropSettings, RaindropState, Raindrops},
 };
-use std::{fs::File, path::Path, sync::mpsc::TryRecvError};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+    sync::mpsc::TryRecvError,
+};
 
 use audio::audio_stream::start_audio_loop;
 use audio::pipewire_listener::PipewireController;
@@ -77,7 +82,7 @@ fn run_loop(
             check_lua_files_changed(
                 &lua_effects_folder,
                 hot_reload_rx,
-                &mut controller.effects,
+                controller.effects.as_mut().unwrap(),
                 &controller.lua_effects_registry,
                 &audio_processor,
             );
@@ -126,11 +131,13 @@ fn load_controller(
                     settings: settings.clone(),
                 }),
             ),
+            SettingsConfigType::Native => controller
+                .add_settings(setting_config.id, Settings::Native(NativeEffectSettings {})),
             SettingsConfigType::Moody(color) => controller.add_settings(
                 setting_config.id,
                 Settings::Moody(MoodySettings { color: *color }),
             ),
-            SettingsConfigType::Raindrop() => controller.add_settings(
+            SettingsConfigType::Raindrop => controller.add_settings(
                 setting_config.id,
                 Settings::Raindrop(RaindropSettings {
                     rain_speed: 1,
@@ -151,10 +158,18 @@ fn load_controller(
                     ),
                 )
             }
-            EffectConfigType::Moody() => {
+            EffectConfigType::Native(file_name) => {
+                let effect_path = std::path::PathBuf::from(file_name);
+                let effect = controller
+                    .native_effect_manager
+                    .create_effect(effect_path)
+                    .unwrap();
+                controller.add_effect(effect_settings.effect_id, Effect::Native(effect))
+            }
+            EffectConfigType::Moody => {
                 controller.add_effect(effect_settings.effect_id, Effect::Moody(Moody {}))
             }
-            EffectConfigType::Raindrop() => controller.add_effect(
+            EffectConfigType::Raindrop => controller.add_effect(
                 effect_settings.effect_id,
                 Effect::Raindrop(Raindrops {
                     state: RaindropState { riples: vec![] },
@@ -191,45 +206,44 @@ fn main() -> Result<(), RunLoopError> {
     env_logger::init();
     let Args { settings_file } = Args::parse();
 
-    loop {
-        log::info!("Creating watcher on Settings.json");
-        let (rx, _debouncer) = start_config_hot_reload().map_err(|e| {
+    log::info!("Creating watcher on Settings.json");
+    let (rx, _debouncer) = start_config_hot_reload().map_err(|e| {
+        log::error!("{:?}", e);
+        RunLoopError::StartAudioLoop
+    })?;
+    log::info!("Parsing config.");
+    let config: TurboAudioConfig =
+        serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
+    log::info!("Starting audio loop.");
+    let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.sample_rate)
+        .map_err(|e| {
             log::error!("{:?}", e);
             RunLoopError::StartAudioLoop
         })?;
-        log::info!("Parsing config.");
-        let config: TurboAudioConfig =
-            serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
-        log::info!("Starting audio loop.");
-        let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.sample_rate)
-            .map_err(|e| {
-                log::error!("{:?}", e);
-                RunLoopError::StartAudioLoop
-            })?;
 
-        log::info!("Creating pipewire listener.");
-        let pipewire_controller = PipewireController::new();
-        log::info!("Setting pipewire connections.");
-        pipewire_controller
-            .set_stream_connections(config.stream_connections.clone())
-            .map_err(|e| {
-                log::error!("{:?}", e);
-                RunLoopError::StartPipewireStream
-            })?;
+    log::info!("Creating pipewire listener.");
+    let pipewire_controller = PipewireController::new();
+    log::info!("Setting pipewire connections.");
+    pipewire_controller
+        .set_stream_connections(config.stream_connections.clone())
+        .map_err(|e| {
+            log::error!("{:?}", e);
+            RunLoopError::StartPipewireStream
+        })?;
 
-        log::info!("Creating audio processor.");
-        let fft_buffer_size: usize = 1024;
-        let audio_processor =
-            AudioSignalProcessor::new(audio_rx, config.sample_rate, fft_buffer_size);
+    log::info!("Creating audio processor.");
+    let fft_buffer_size: usize = 1024;
+    let audio_processor = AudioSignalProcessor::new(audio_rx, config.sample_rate, fft_buffer_size);
 
-        log::info!("Loading config into controller.");
-        let controller = load_controller(&config, &audio_processor, &config.lua_effects_folder)
-            .map_err(|e| {
-                log::error!("{:?}", e);
-                RunLoopError::LoadConfigFile
-            })?;
+    log::info!("Loading config into controller.");
+    let controller = load_controller(&config, &audio_processor, &config.lua_effects_folder)
+        .map_err(|e| {
+            log::error!("{:?}", e);
+            RunLoopError::LoadConfigFile
+        })?;
 
-        log::info!("Starting run loop.");
-        run_loop(audio_processor, controller, &config.lua_effects_folder, &rx)?;
-    }
+    log::info!("Starting run loop.");
+    run_loop(audio_processor, controller, &config.lua_effects_folder, &rx)?;
+
+    Ok(())
 }

@@ -22,11 +22,7 @@
   ],
   "effect_settings": [
     {
-      "setting": {
-        "Lua": {
-          "settings": {}
-        }
-      },
+      "setting": "Native",
       "id": 1
     }
   ],
@@ -35,7 +31,7 @@
       "effect_id": 1,
       "settings_id": 1,
       "effect": {
-        "Lua": "sketchers.lua"
+        "Native": "../effects/rust/soin/target/debug/libsoin.so"
       }
     }
   ],

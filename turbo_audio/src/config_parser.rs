@@ -7,15 +7,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub enum EffectConfigType {
     Lua(String),
-    Moody(),
-    Raindrop(),
+    Native(String),
+    Moody,
+    Raindrop,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SettingsConfigType {
+    Native,
     Lua(serde_json::Value),
     Moody(Color),
-    Raindrop(),
+    Raindrop,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

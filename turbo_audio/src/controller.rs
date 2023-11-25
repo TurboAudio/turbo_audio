@@ -1,6 +1,6 @@
 use crate::{
     resources::{
-        effects::{moody::update_moody, raindrop::update_raindrop},
+        effects::{moody::update_moody, native::NativeEffectManager, raindrop::update_raindrop},
         ledstrip::LedStrip,
     },
     Connection, Effect, Settings,
@@ -11,17 +11,34 @@ use std::{collections::HashMap, path::PathBuf};
 #[allow(unused)]
 pub struct Controller {
     settings: HashMap<usize, Settings>,
-    pub effects: HashMap<usize, Effect>,
+    pub effects: Option<HashMap<usize, Effect>>,
     effect_settings: HashMap<usize, usize>,
     connections: HashMap<usize, Connection>,
     led_strips: HashMap<usize, LedStrip>,
     led_strip_connections: HashMap<usize, usize>,
     pub lua_effects_registry: HashMap<PathBuf, Vec<usize>>,
+    pub native_effect_manager: NativeEffectManager,
+}
+
+impl Drop for Controller {
+    fn drop(&mut self) {
+        log::info!("Dropping controller");
+        self.effects.take();
+    }
 }
 
 impl Controller {
     pub fn new() -> Self {
-        Controller::default()
+        Self {
+            settings: Default::default(),
+            effects: Some(Default::default()),
+            effect_settings: Default::default(),
+            connections: Default::default(),
+            led_strips: Default::default(),
+            led_strip_connections: Default::default(),
+            lua_effects_registry: Default::default(),
+            native_effect_manager: Default::default(),
+        }
     }
 
     pub fn add_effect(&mut self, id: usize, effect: Effect) {
@@ -35,7 +52,7 @@ impl Controller {
                 }
             }
         }
-        self.effects.insert(id, effect);
+        self.effects.as_mut().unwrap().insert(id, effect);
     }
 
     pub fn add_settings(&mut self, id: usize, settings: Settings) {
@@ -85,7 +102,7 @@ impl Controller {
                     }
                 };
 
-                let effect = match self.effects.get_mut(effect_id) {
+                let effect = match self.effects.as_mut().unwrap().get_mut(effect_id) {
                     Some(effect) => effect,
                     None => {
                         // TODO fix le probleme
@@ -116,6 +133,9 @@ impl Controller {
                             log::error!("Error when executing lua function: {:?}", e);
                         }
                     }
+                    (Effect::Native(native), Some(Settings::Native(_settings))) => {
+                        native.tick().unwrap();
+                    }
                     _ => panic!("Effect doesn't match settings"),
                 }
             }
@@ -133,7 +153,7 @@ impl Controller {
 
                         match connection {
                             Connection::Tcp(tcp_connection) => {
-                                // If send fails, connection is closed.
+                                // If send failsrust use Path for Pathbuf key, connection is closed.
                                 if let Err(error) = tcp_connection.send_data(data.to_vec()) {
                                     log::error!("{:?}", error);
                                     self.connections.remove(connection_id);
