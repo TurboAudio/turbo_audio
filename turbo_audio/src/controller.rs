@@ -1,6 +1,6 @@
 use crate::{
-    resources::{effects::native::NativeEffectManager, ledstrip::LedStrip},
-    Connection, Effect, Settings,
+    effects::native::NativeEffectManager, resources::ledstrip::LedStrip, Connection, Effect,
+    Settings,
 };
 use std::{collections::HashMap, path::PathBuf};
 

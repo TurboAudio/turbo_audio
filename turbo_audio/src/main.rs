@@ -2,28 +2,29 @@ mod audio;
 mod config_parser;
 mod connections;
 mod controller;
+mod effects;
 mod hot_reload;
 mod resources;
 
 use audio::audio_processing::AudioSignalProcessor;
+use audio::{audio_stream::start_audio_loop, pipewire_listener::PipewireController};
+use clap::Parser;
+use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, TurboAudioConfig};
+use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
 use controller::Controller;
+use effects::{
+    lua::{LuaEffect, LuaEffectSettings},
+    native::NativeEffectSettings,
+    Effect, Settings,
+};
 use hot_reload::{
     check_lua_files_changed, start_config_hot_reload, start_hot_reload_lua_effects,
     HotReloadReceiver,
 };
-use resources::effects::{
-    lua::{LuaEffect, LuaEffectSettings},
-    native::NativeEffectSettings,
-};
 use std::{fs::File, path::Path, sync::mpsc::TryRecvError};
 
-use audio::audio_stream::start_audio_loop;
-use audio::pipewire_listener::PipewireController;
-use clap::Parser;
-use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, TurboAudioConfig};
-use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
+use crate::resources::ledstrip::LedStrip;
 
-use crate::resources::{effects::Effect, ledstrip::LedStrip, settings::Settings};
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
 struct Args {

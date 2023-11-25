@@ -1,6 +1,6 @@
 use crate::{
     audio::audio_processing::AudioSignalProcessor,
-    resources::effects::{
+    effects::{
         lua::{LuaEffect, LuaEffectLoadError},
         Effect,
     },
