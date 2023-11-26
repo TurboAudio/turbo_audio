@@ -31,6 +31,8 @@ impl Plugin for Soin {
     fn tick(&self) {
         let mut state = self.state.lock().unwrap();
         state.num += 1;
+        println!("State: {}", state.num);
+        println!("francis est beau");
     }
 
     fn load() {

@@ -11,6 +11,8 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use super::Effect;
+
 #[derive(Debug)]
 pub enum InvalidEffectError {
     MissingSchema,
@@ -30,6 +32,48 @@ pub enum LuaEffectRuntimeError {
     WrongColorsLen,
     MissingTickFunction,
     MissingFrameworkImport,
+}
+
+pub struct LuaEffectsManager {
+    package_root: PathBuf,
+}
+
+impl LuaEffectsManager {
+    pub fn new(package_root: impl AsRef<Path>) -> Self {
+        Self {
+            package_root: package_root.as_ref().to_owned(),
+        }
+    }
+
+    pub fn create_effect(
+        &mut self,
+        effect_path: impl AsRef<Path>,
+        audio_processor: &AudioSignalProcessor,
+    ) -> Result<Effect, LuaEffectLoadError> {
+        let effect = Effect::Lua(LuaEffect::new(
+            &effect_path,
+            &self.package_root,
+            audio_processor,
+        )?);
+        Ok(effect)
+    }
+
+    pub fn on_file_changed(&mut self, _file: impl AsRef<Path>) {}
+
+    pub fn reload_effect(
+        &mut self,
+        effect_to_reload: &mut LuaEffect,
+        audio_processing: &AudioSignalProcessor,
+    ) {
+        let Ok(new_effect) =
+            LuaEffect::new(&effect_to_reload.path, &self.package_root, audio_processing)
+        else {
+            log::error!("cringe");
+            return;
+        };
+
+        let _ = std::mem::replace(effect_to_reload, new_effect);
+    }
 }
 
 #[allow(unused)]
@@ -88,7 +132,7 @@ impl mlua::UserData for LuaFftResult {
 }
 
 impl LuaEffect {
-    pub fn new(
+    fn new(
         effect_path: impl AsRef<Path>,
         package_root: impl AsRef<Path>,
         audio_processor: &AudioSignalProcessor,
@@ -102,10 +146,6 @@ impl LuaEffect {
             json_schema,
             compiled_json_schema,
         })
-    }
-
-    pub fn get_path(&self) -> impl AsRef<Path> + '_ {
-        &self.path
     }
 
     pub fn tick(

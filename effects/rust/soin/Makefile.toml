@@ -2,6 +2,11 @@
 command = "mkdir"
 args = ["-p", "../../bin"]
 
+[tasks.rm]
+command = "rm"
+args = ["-f", "../../bin/libsoin.so"]
+dependencies = ["build-release", "mkdir"]
+
 [tasks.build-debug]
 command = "cargo"
 args = ["build"]
@@ -9,7 +14,7 @@ args = ["build"]
 [tasks.install-debug]
 command = "cp"
 args = ["target/debug/libsoin.so", "../../bin"]
-dependencies = ["build-debug", "mkdir"]
+dependencies = ["build-debug", "mkdir", "rm"]
 
 [tasks.build-release]
 command = "cargo"
@@ -18,4 +23,4 @@ args = ["build", "--release"]
 [tasks.install-release]
 command = "cp"
 args = ["target/release/libsoin.so",  "../../bin"]
-dependencies = ["build-release", "mkdir"]
+dependencies = ["build-release", "mkdir", "rm"]

@@ -4,6 +4,7 @@ mod connections;
 mod controller;
 mod effects;
 mod hot_reload;
+mod hot_reloader;
 mod resources;
 
 use audio::audio_processing::AudioSignalProcessor;
@@ -12,15 +13,8 @@ use clap::Parser;
 use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, TurboAudioConfig};
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
 use controller::Controller;
-use effects::{
-    lua::{LuaEffect, LuaEffectSettings},
-    native::NativeEffectSettings,
-    Effect, EffectSettings,
-};
-use hot_reload::{
-    check_lua_files_changed, start_config_hot_reload, start_hot_reload_lua_effects,
-    HotReloadReceiver,
-};
+use effects::{lua::LuaEffectSettings, native::NativeEffectSettings, Effect, EffectSettings};
+use hot_reload::{start_config_hot_reload, HotReloadReceiver};
 use std::{fs::File, path::Path, sync::mpsc::TryRecvError};
 
 use crate::resources::ledstrip::LedStrip;
@@ -43,17 +37,8 @@ enum RunLoopError {
 fn run_loop(
     mut audio_processor: AudioSignalProcessor,
     mut controller: Controller,
-    lua_effects_folder: impl AsRef<Path>,
     reload_config_rx: &HotReloadReceiver,
 ) -> Result<(), RunLoopError> {
-    let (hot_reload_rx, _debouncer) = match start_hot_reload_lua_effects(&lua_effects_folder) {
-        Err(e) => {
-            log::error!("Hot reload may not be active: {e:?}");
-            (None, None)
-        }
-        Ok((hot_reload_rx, debouncer)) => (Some(hot_reload_rx), Some(debouncer)),
-    };
-
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
     let mut last_loop_start = std::time::Instant::now();
@@ -70,18 +55,9 @@ fn run_loop(
         audio_processor.compute_fft();
 
         let _fft_result_read_lock = audio_processor.fft_result.read().unwrap();
+        controller.check_hot_reload(&audio_processor);
         controller.update_led_strips();
         controller.send_ledstrip_colors();
-
-        if let Some(hot_reload_rx) = &hot_reload_rx {
-            check_lua_files_changed(
-                &lua_effects_folder,
-                hot_reload_rx,
-                controller.effects.as_mut().unwrap(),
-                &controller.lua_effects_registry,
-                &audio_processor,
-            );
-        }
 
         match reload_config_rx.try_recv() {
             Ok(_) => return Ok(()),
@@ -105,7 +81,7 @@ fn load_controller(
     audio_processor: &AudioSignalProcessor,
     lua_effects_foler: impl AsRef<Path>,
 ) -> Result<Controller, LoadControllerError> {
-    let mut controller = Controller::new();
+    let mut controller = Controller::new(&lua_effects_foler);
     for connection_config in config.devices.iter() {
         match &connection_config.connection {
             ConnectionConfigType::Tcp(ip) => controller.add_connection(
@@ -137,20 +113,11 @@ fn load_controller(
         match &effect_settings.effect {
             EffectConfigType::Lua(file_name) => {
                 let effect_path = lua_effects_foler.as_ref().to_owned().join(file_name);
-                controller.add_effect(
-                    effect_settings.effect_id,
-                    Effect::Lua(
-                        LuaEffect::new(effect_path, &lua_effects_foler, audio_processor).unwrap(),
-                    ),
-                )
+                controller.add_lua_effect(effect_settings.effect_id, effect_path, audio_processor);
             }
             EffectConfigType::Native(file_name) => {
                 let effect_path = std::path::PathBuf::from(file_name);
-                let effect = controller
-                    .native_effect_manager
-                    .create_effect(effect_path)
-                    .unwrap();
-                controller.add_effect(effect_settings.effect_id, Effect::Native(effect))
+                controller.add_native_effect(effect_settings.effect_id, effect_path);
             }
         }
         if !controller
@@ -183,44 +150,45 @@ fn main() -> Result<(), RunLoopError> {
     env_logger::init();
     let Args { settings_file } = Args::parse();
 
-    log::info!("Creating watcher on Settings.json");
-    let (rx, _debouncer) = start_config_hot_reload().map_err(|e| {
-        log::error!("{:?}", e);
-        RunLoopError::StartAudioLoop
-    })?;
-    log::info!("Parsing config.");
-    let config: TurboAudioConfig =
-        serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
-    log::info!("Starting audio loop.");
-    let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.sample_rate)
-        .map_err(|e| {
+    loop {
+        log::info!("Creating watcher on Settings.json");
+        let (rx, _debouncer) = start_config_hot_reload().map_err(|e| {
             log::error!("{:?}", e);
             RunLoopError::StartAudioLoop
         })?;
+        log::info!("Parsing config.");
+        let config: TurboAudioConfig =
+            serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
+        log::info!("Starting audio loop.");
+        let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.sample_rate)
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::StartAudioLoop
+            })?;
 
-    log::info!("Creating pipewire listener.");
-    let pipewire_controller = PipewireController::new();
-    log::info!("Setting pipewire connections.");
-    pipewire_controller
-        .set_stream_connections(config.stream_connections.clone())
-        .map_err(|e| {
-            log::error!("{:?}", e);
-            RunLoopError::StartPipewireStream
-        })?;
+        log::info!("Creating pipewire listener.");
+        let pipewire_controller = PipewireController::new();
+        log::info!("Setting pipewire connections.");
+        pipewire_controller
+            .set_stream_connections(config.stream_connections.clone())
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::StartPipewireStream
+            })?;
 
-    log::info!("Creating audio processor.");
-    let fft_buffer_size: usize = 1024;
-    let audio_processor = AudioSignalProcessor::new(audio_rx, config.sample_rate, fft_buffer_size);
+        log::info!("Creating audio processor.");
+        let fft_buffer_size: usize = 1024;
+        let audio_processor =
+            AudioSignalProcessor::new(audio_rx, config.sample_rate, fft_buffer_size);
 
-    log::info!("Loading config into controller.");
-    let controller = load_controller(&config, &audio_processor, &config.lua_effects_folder)
-        .map_err(|e| {
-            log::error!("{:?}", e);
-            RunLoopError::LoadConfigFile
-        })?;
+        log::info!("Loading config into controller.");
+        let controller = load_controller(&config, &audio_processor, &config.lua_effects_folder)
+            .map_err(|e| {
+                log::error!("{:?}", e);
+                RunLoopError::LoadConfigFile
+            })?;
 
-    log::info!("Starting run loop.");
-    run_loop(audio_processor, controller, &config.lua_effects_folder, &rx)?;
-
-    Ok(())
+        log::info!("Starting run loop.");
+        run_loop(audio_processor, controller, &rx)?;
+    }
 }

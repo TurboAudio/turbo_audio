@@ -31,7 +31,7 @@
       "effect_id": 1,
       "settings_id": 1,
       "effect": {
-        "Native": "../effects/rust/soin/target/debug/libsoin.so"
+        "Native": "../effects/bin/libsoin.so"
       }
     }
   ],
