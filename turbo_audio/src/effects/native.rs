@@ -2,13 +2,15 @@ use std::{
     collections::HashMap,
     io,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, RwLock},
 };
 
 use libloading::os::unix::{RTLD_LOCAL, RTLD_NOW};
 use turbo_plugin::VTable;
 
 use thiserror::Error;
+
+use crate::audio::audio_processing::{AudioSignalProcessor, FftResult};
 
 use super::Effect;
 
@@ -23,9 +25,9 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Default)]
 pub struct NativeEffectsManager {
     libraries: HashMap<PathBuf, Arc<Library>>,
+    fft_result: Arc<RwLock<FftResult>>,
 }
 
 #[derive(Debug)]
@@ -34,6 +36,9 @@ struct Library {
     vtable: *const VTable,
     id: u64,
 }
+
+unsafe impl Send for Library {}
+unsafe impl Sync for Library {}
 
 impl Drop for Library {
     fn drop(&mut self) {
@@ -46,6 +51,12 @@ impl Drop for Library {
 }
 
 impl NativeEffectsManager {
+    pub fn new(audio_processor: &AudioSignalProcessor) -> Self {
+        Self {
+            libraries: Default::default(),
+            fft_result: audio_processor.fft_result.clone(),
+        }
+    }
     pub fn create_effect(&mut self, effect_path: impl AsRef<Path>) -> Result<Effect> {
         let path = std::fs::canonicalize(&effect_path).unwrap();
 

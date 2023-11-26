@@ -1,5 +1,3 @@
-use notify_debouncer_mini::{DebouncedEvent, DebouncedEventKind};
-
 use crate::{
     audio::audio_processing::AudioSignalProcessor,
     effects::{lua::LuaEffectsManager, native::NativeEffectsManager},
@@ -9,7 +7,6 @@ use crate::{
 };
 use std::{
     collections::HashMap,
-    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -47,7 +44,7 @@ impl Drop for Controller {
 }
 
 impl Controller {
-    pub fn new(lua_package_root: impl AsRef<Path>) -> Self {
+    pub fn new(audio_processor: &AudioSignalProcessor, lua_package_root: impl AsRef<Path>) -> Self {
         let hot_reloader = HotReloader::new(&[
             WatchablePath::recursive(lua_package_root.as_ref()),
             WatchablePath::recursive(PathBuf::from("../effects/bin").as_ref()),
@@ -67,8 +64,8 @@ impl Controller {
             led_strips: Default::default(),
             led_strip_connections: Default::default(),
             effects_registry: Default::default(),
-            native_effect_manager: Default::default(),
-            lua_effects_manager: LuaEffectsManager::new(&lua_package_root),
+            native_effect_manager: NativeEffectsManager::new(audio_processor),
+            lua_effects_manager: LuaEffectsManager::new(audio_processor, &lua_package_root),
             hot_reloader: hot_reloader.ok(),
         }
     }
@@ -89,10 +86,15 @@ impl Controller {
             self.lua_effects_manager.on_file_changed(path);
         } else if all_native {
             self.native_effect_manager.on_file_changed(path);
+        } else {
+            log::error!(
+                "Not all effects loaded from the file {} are of the same type. This is impossible",
+                path.display()
+            );
         }
     }
 
-    pub fn check_hot_reload(&mut self, audio_processor: &AudioSignalProcessor) {
+    pub fn check_hot_reload(&mut self) {
         let Some(hot_reloader) = &self.hot_reloader else {
             return;
         };
@@ -131,27 +133,21 @@ impl Controller {
                         self.native_effect_manager.reload_effect(effect);
                     }
                     Effect::Lua(effect) => {
-                        self.lua_effects_manager
-                            .reload_effect(effect, audio_processor);
+                        self.lua_effects_manager.reload_effect(effect);
                     }
                 };
             }
         }
     }
 
-    pub fn add_lua_effect(
-        &mut self,
-        id: usize,
-        effect_path: impl AsRef<Path>,
-        audio_processor: &AudioSignalProcessor,
-    ) {
+    pub fn add_lua_effect(&mut self, id: usize, effect_path: impl AsRef<Path>) {
         let Ok(canonicalized_effect_path) = std::fs::canonicalize(&effect_path) else {
             return;
         };
 
         let effect = self
             .lua_effects_manager
-            .create_effect(&canonicalized_effect_path, audio_processor);
+            .create_effect(&canonicalized_effect_path);
 
         let effect = match effect {
             Err(e) => {

@@ -55,7 +55,7 @@ fn run_loop(
         audio_processor.compute_fft();
 
         let _fft_result_read_lock = audio_processor.fft_result.read().unwrap();
-        controller.check_hot_reload(&audio_processor);
+        controller.check_hot_reload();
         controller.update_led_strips();
         controller.send_ledstrip_colors();
 
@@ -81,7 +81,7 @@ fn load_controller(
     audio_processor: &AudioSignalProcessor,
     lua_effects_foler: impl AsRef<Path>,
 ) -> Result<Controller, LoadControllerError> {
-    let mut controller = Controller::new(&lua_effects_foler);
+    let mut controller = Controller::new(audio_processor, &lua_effects_foler);
     for connection_config in config.devices.iter() {
         match &connection_config.connection {
             ConnectionConfigType::Tcp(ip) => controller.add_connection(
@@ -113,7 +113,7 @@ fn load_controller(
         match &effect_settings.effect {
             EffectConfigType::Lua(file_name) => {
                 let effect_path = lua_effects_foler.as_ref().to_owned().join(file_name);
-                controller.add_lua_effect(effect_settings.effect_id, effect_path, audio_processor);
+                controller.add_lua_effect(effect_settings.effect_id, effect_path);
             }
             EffectConfigType::Native(file_name) => {
                 let effect_path = std::path::PathBuf::from(file_name);
