@@ -7,4 +7,5 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+rand = "0.8.5"
 turbo_plugin = { path = "../../../turbo_plugin" }

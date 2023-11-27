@@ -1,6 +1,6 @@
 use std::collections::HashSet;
+use turbo_plugin::Color;
 
-use super::color::Color;
 pub type EffectInterval = (usize, usize);
 #[derive(Debug, Default)]
 pub struct LedStrip {

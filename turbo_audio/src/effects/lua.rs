@@ -1,7 +1,5 @@
-use crate::{
-    audio::{audio_processing::AudioSignalProcessor, audio_processing::FftResult},
-    resources::color::Color,
-};
+use super::Effect;
+use crate::audio::{audio_processing::AudioSignalProcessor, audio_processing::FftResult};
 use jsonschema::JSONSchema;
 use mlua::{Error, Function, Lua, LuaSerdeExt, Table, Value};
 use std::{
@@ -10,8 +8,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
-
-use super::Effect;
+use turbo_plugin::Color;
 
 #[derive(Debug)]
 pub enum InvalidEffectError {

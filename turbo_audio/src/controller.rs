@@ -107,10 +107,10 @@ impl Controller {
             };
 
             let Some(effects) = self.effects_registry.get(&path).map(|x| x.to_owned()) else {
-                log::info!("Ignoring: {}", path.display());
                 continue;
             };
 
+            println!("1");
             for effect_id in &effects {
                 let Some(effect) = self.effects.as_mut().unwrap().get_mut(effect_id) else {
                     continue;
@@ -275,7 +275,7 @@ impl Controller {
                         }
                     }
                     (Effect::Native(native), Some(EffectSettings::Native(_settings))) => {
-                        native.tick().unwrap();
+                        native.tick(leds).unwrap();
                     }
                     _ => panic!("Effect doesn't match settings"),
                 }

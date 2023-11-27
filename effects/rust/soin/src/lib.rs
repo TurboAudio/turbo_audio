@@ -1,14 +1,26 @@
+use rand::Rng;
 use std::sync::Mutex;
+use turbo_plugin::{Color, Plugin, VTable};
 
-use turbo_plugin::{Plugin, VTable};
+#[derive(Clone, Copy, Debug)]
+pub struct RaindropSettings {
+    pub rain_speed: i32,
+    pub drop_rate: f64,
+}
 
-#[derive(Default)]
-struct State {
-    num: i32,
+#[derive(Clone, Copy, Debug)]
+pub enum RipleDirection {
+    Left,
+    Right,
+}
+
+#[derive(Debug, Default)]
+pub struct RaindropState {
+    riples: Vec<(usize, Color, RipleDirection)>,
 }
 
 struct Soin {
-    state: Mutex<State>,
+    state: Mutex<RaindropState>,
 }
 
 impl Soin {
@@ -28,11 +40,11 @@ impl Plugin for Soin {
         CSTR_NAME.as_ptr()
     }
 
-    fn tick(&self) {
-        let mut state = self.state.lock().unwrap();
-        state.num += 1;
-        println!("State: {}", state.num);
-        println!("francis est beau");
+    fn tick(&self, leds: &mut [Color]) {
+        for led in leds {
+            led.r = 255;
+            led.g = 255;
+        }
     }
 
     fn load() {
@@ -68,12 +80,18 @@ extern "C" fn _plugin_vtable() -> *const std::ffi::c_void {
         plugin.name()
     }
 
-    extern "C" fn tick(plugin: *const std::ffi::c_void) {
+    extern "C" fn tick(
+        plugin: *const std::ffi::c_void,
+        colors: *mut Color,
+        len: std::ffi::c_ulong,
+    ) {
         let plugin = unsafe { &*(plugin as *const Soin) };
-        plugin.tick();
+        let slice = unsafe { std::slice::from_raw_parts_mut(colors, len as _) };
+        plugin.tick(slice);
     }
 
-    extern "C" fn load() {
+    extern "C" fn load(audio_api: turbo_plugin::AudioApi) {
+        turbo_plugin::on_load(audio_api);
         Soin::load();
     }
 
