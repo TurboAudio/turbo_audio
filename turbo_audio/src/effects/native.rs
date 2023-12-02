@@ -69,6 +69,7 @@ impl NativeEffectsManager {
             path: effect_path.as_ref().to_owned(),
             pointer: plugin,
             library: Some(library.clone()),
+            is_dropped: false,
         }))
     }
 
@@ -97,6 +98,7 @@ impl NativeEffectsManager {
                 ((*library.vtable).plugin_destroy)(effect.pointer);
             }
         }
+        effect.is_dropped = true;
         effect.library.take();
     }
 
@@ -181,10 +183,15 @@ pub struct NativeEffect {
     path: PathBuf,
     pointer: *mut std::ffi::c_void,
     library: Option<Arc<Library>>,
+    is_dropped: bool,
 }
 
 impl Drop for NativeEffect {
     fn drop(&mut self) {
+        if self.is_dropped {
+            return;
+        }
+
         if let Some(library) = &self.library {
             log::info!("Dropping native effect");
             unsafe {
