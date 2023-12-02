@@ -4,7 +4,7 @@ args = ["-p", "../../bin"]
 
 [tasks.rm]
 command = "rm"
-args = ["-f", "../../bin/libsoin.so"]
+args = ["-f", "../../bin/libraindrop.so"]
 dependencies = ["build-release", "mkdir"]
 
 [tasks.build-debug]
@@ -13,7 +13,7 @@ args = ["build"]
 
 [tasks.install-debug]
 command = "cp"
-args = ["target/debug/libsoin.so", "../../bin"]
+args = ["target/debug/libraindrop.so", "../../bin"]
 dependencies = ["build-debug", "mkdir", "rm"]
 
 [tasks.build-release]
@@ -22,5 +22,5 @@ args = ["build", "--release"]
 
 [tasks.install-release]
 command = "cp"
-args = ["target/release/libsoin.so",  "../../bin"]
+args = ["target/release/libraindrop.so",  "../../bin"]
 dependencies = ["build-release", "mkdir", "rm"]
