@@ -1,6 +1,6 @@
 use rand::Rng;
 use std::sync::Mutex;
-use turbo_plugin::{Color, Plugin, VTable};
+use turbo_plugin::{make_plugin, Color, Plugin, VTable};
 
 #[derive(Clone, Copy, Debug)]
 pub struct RaindropSettings {
@@ -25,7 +25,6 @@ struct Soin {
 
 impl Soin {
     pub fn new() -> Self {
-        println!("New!!");
         Self {
             state: Default::default(),
         }
@@ -114,66 +113,9 @@ impl Plugin for Soin {
         state.riples = next_riples;
     }
 
-    fn load() {
-        println!("Loading shared library");
-    }
+    fn load() {}
 
-    fn unload() {
-        println!("Unloading shared library");
-    }
+    fn unload() {}
 }
 
-impl Drop for Soin {
-    fn drop(&mut self) {
-        println!("Dropping plugin instance");
-    }
-}
-
-#[no_mangle]
-extern "C" fn _plugin_vtable() -> *const std::ffi::c_void {
-    extern "C" fn plugin_create() -> *mut std::ffi::c_void {
-        let plugin = Box::new(Soin::new());
-        Box::into_raw(plugin) as *mut _
-    }
-
-    extern "C" fn plugin_destroy(plugin: *mut std::ffi::c_void) {
-        unsafe {
-            drop(Box::from_raw(plugin as *mut Soin));
-        }
-    }
-
-    extern "C" fn name(plugin: *const std::ffi::c_void) -> *const std::ffi::c_char {
-        let plugin = unsafe { &*(plugin as *const Soin) };
-        plugin.name()
-    }
-
-    extern "C" fn tick(
-        plugin: *const std::ffi::c_void,
-        colors: *mut Color,
-        len: std::ffi::c_ulong,
-    ) {
-        let plugin = unsafe { &*(plugin as *const Soin) };
-        let slice = unsafe { std::slice::from_raw_parts_mut(colors, len as _) };
-        plugin.tick(slice);
-    }
-
-    extern "C" fn load(audio_api: turbo_plugin::AudioApi) {
-        turbo_plugin::on_load(audio_api);
-        Soin::load();
-    }
-
-    extern "C" fn unload() {
-        Soin::unload();
-    }
-
-    static VTABLE: VTable = VTable {
-        plugin_create,
-        plugin_destroy,
-        name,
-        tick,
-        load,
-        unload,
-    };
-
-    &VTABLE as *const VTable as *const _
-}
+make_plugin!(Soin, Soin::new());

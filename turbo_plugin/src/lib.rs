@@ -21,13 +21,67 @@ pub trait Plugin: Any + Send + Sync {
     /// Tick fn
     fn tick(&self, leds: &mut [Color]);
 
-    /// A callback fired immediately after the plugin is loaded. Usually used
+    /// A callback called immediately after the plugin is loaded. Usually used
     /// for initialization.
     fn load();
 
-    /// A callback fired immediately before the plugin is unloaded. Use this if
+    /// A callback called immediately before the plugin is unloaded. Use this if
     /// you need to do any cleanup.
     fn unload();
+}
+
+#[macro_export]
+macro_rules! make_plugin {
+    ($plugin:ty, $ctor:expr) => {
+        #[no_mangle]
+        extern "C" fn _plugin_vtable() -> *const std::ffi::c_void {
+            extern "C" fn plugin_create() -> *mut std::ffi::c_void {
+                let plugin = Box::new($ctor);
+                Box::into_raw(plugin) as *mut _
+            }
+
+            extern "C" fn plugin_destroy(plugin: *mut std::ffi::c_void) {
+                unsafe {
+                    drop(Box::from_raw(plugin as *mut Soin));
+                }
+            }
+
+            extern "C" fn name(plugin: *const std::ffi::c_void) -> *const std::ffi::c_char {
+                let plugin = unsafe { &*(plugin as *const $plugin) };
+                plugin.name()
+            }
+
+            extern "C" fn tick(
+                plugin: *const std::ffi::c_void,
+                colors: *mut Color,
+                len: std::ffi::c_ulong,
+            ) {
+                let plugin = unsafe { &*(plugin as *const $plugin) };
+                let slice = unsafe { std::slice::from_raw_parts_mut(colors, len as _) };
+                plugin.tick(slice);
+            }
+
+            extern "C" fn load(audio_api: turbo_plugin::AudioApi) {
+                turbo_plugin::on_load(audio_api);
+                Soin::load();
+            }
+
+            extern "C" fn unload() {
+                Soin::unload();
+            }
+
+            static VTABLE: VTable = VTable {
+                plugin_create,
+                plugin_destroy,
+                name,
+                tick,
+                load,
+                unload,
+            };
+
+            &VTABLE as *const VTable as *const _
+        }
+    };
 }
 
 #[derive(Copy, Clone)]
