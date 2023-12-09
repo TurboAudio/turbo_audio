@@ -22,14 +22,27 @@
   ],
   "effect_settings": [
     {
-      "setting": "Native",
+      "setting": {
+        "Lua": {}
+      },
       "id": 1
+    },
+    {
+      "setting": "Native",
+      "id": 2
     }
   ],
   "effects": [
     {
       "effect_id": 1,
       "settings_id": 1,
+      "effect": {
+        "Lua": "sketchers.lua"
+      }
+    },
+    {
+      "effect_id": 2,
+      "settings_id": 2,
       "effect": {
         "Native": "../effects/bin/libraindrop.so"
       }

@@ -117,9 +117,13 @@ impl AudioSignalProcessor {
 
     pub fn compute_fft(&mut self) {
         let sample_count = self.audio_sample_rx.pop_slice(self.tmp_vec.as_mut_slice());
-        self.tmp_vec.iter().take(sample_count).for_each(|sample| {
-            self.audio_sample_buffer.push(*sample);
-        });
+        if sample_count == 0 {
+            self.audio_sample_buffer.iter_mut().for_each(|x| *x = 0.0);
+        } else {
+            self.tmp_vec.iter().take(sample_count).for_each(|sample| {
+                self.audio_sample_buffer.push(*sample);
+            });
+        }
 
         self.fft_window_buffer.clear();
         self.fft_window_buffer.extend(

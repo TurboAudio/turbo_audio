@@ -141,8 +141,12 @@ impl Controller {
     }
 
     pub fn add_lua_effect(&mut self, id: usize, effect_path: impl AsRef<Path>) {
-        let Ok(canonicalized_effect_path) = std::fs::canonicalize(&effect_path) else {
-            return;
+        let canonicalized_effect_path = match std::fs::canonicalize(&effect_path) {
+            Ok(x) => x,
+            Err(e) => {
+                log::error!("Couldn't load {}, {e}", effect_path.as_ref().display());
+                return;
+            }
         };
 
         let effect = self

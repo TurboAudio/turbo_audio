@@ -188,9 +188,7 @@ fn pipewire_thread(
             let core = core.clone();
             move |id| {
                 let mut state = state.lock().unwrap();
-                state
-                    .remove_object(id)
-                    .unwrap_or_else(|err| log::error!("{}", err));
+                let _ = state.remove_object(id);
                 add_missing_connections(&core, &state, &stream_connections.borrow_mut());
             }
         })
@@ -312,6 +310,8 @@ impl PipewireState {
             .or_else(|| props.get("node.name"))
             .unwrap_or_default()
             .to_string();
+
+        log::info!("Pipewire node: {name}");
 
         self.nodes.insert(
             node.id,

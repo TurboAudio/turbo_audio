@@ -3,10 +3,11 @@ mod config_parser;
 mod connections;
 mod controller;
 mod effects;
-mod hot_reload;
 mod hot_reloader;
 mod resources;
 
+use crate::hot_reloader::{HotReloader, WatchablePath};
+use crate::resources::ledstrip::LedStrip;
 use audio::audio_processing::AudioSignalProcessor;
 use audio::{audio_stream::start_audio_loop, pipewire_listener::PipewireController};
 use clap::Parser;
@@ -14,10 +15,8 @@ use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, 
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
 use controller::Controller;
 use effects::{lua::LuaEffectSettings, native::NativeEffectSettings, Effect, EffectSettings};
-use hot_reload::{start_config_hot_reload, HotReloadReceiver};
-use std::{fs::File, path::Path, sync::mpsc::TryRecvError};
-
-use crate::resources::ledstrip::LedStrip;
+use std::path::PathBuf;
+use std::{fs::File, path::Path};
 
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
@@ -37,8 +36,18 @@ enum RunLoopError {
 fn run_loop(
     mut audio_processor: AudioSignalProcessor,
     mut controller: Controller,
-    reload_config_rx: &HotReloadReceiver,
 ) -> Result<(), RunLoopError> {
+    log::info!("Creating watcher on Settings.json");
+    let config_hot_reload = HotReloader::new(&[WatchablePath::non_recursive(&PathBuf::from(
+        "Settings.json",
+    ))]);
+
+    if let Err(e) = &config_hot_reload {
+        log::error!("Couldn't start watching the config for hot reload: {e}");
+    }
+
+    let config_hot_reload = config_hot_reload.ok();
+
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
     let mut last_loop_start = std::time::Instant::now();
@@ -59,12 +68,11 @@ fn run_loop(
         controller.update_led_strips();
         controller.send_ledstrip_colors();
 
-        match reload_config_rx.try_recv() {
-            Ok(_) => return Ok(()),
-            Err(TryRecvError::Disconnected) => {
-                log::error!("Disconnected patnais")
+        if let Some(config_hot_reload) = &config_hot_reload {
+            if !config_hot_reload.poll_events().is_empty() {
+                log::info!("Config changed. Restarting.");
+                return Ok(());
             }
-            _ => {}
         }
 
         lag = lag.checked_sub(&duration_per_tick).unwrap();
@@ -151,11 +159,6 @@ fn main() -> Result<(), RunLoopError> {
     let Args { settings_file } = Args::parse();
 
     loop {
-        log::info!("Creating watcher on Settings.json");
-        let (rx, _debouncer) = start_config_hot_reload().map_err(|e| {
-            log::error!("{:?}", e);
-            RunLoopError::StartAudioLoop
-        })?;
         log::info!("Parsing config.");
         let config: TurboAudioConfig =
             serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
@@ -189,6 +192,7 @@ fn main() -> Result<(), RunLoopError> {
             })?;
 
         log::info!("Starting run loop.");
-        run_loop(audio_processor, controller, &rx)?;
+        run_loop(audio_processor, controller)?;
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
