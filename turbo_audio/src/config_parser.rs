@@ -1,21 +1,18 @@
 use std::path::PathBuf;
 
 use crate::audio::pipewire_listener::StreamConnections;
-use crate::resources::color::Color;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum EffectConfigType {
     Lua(String),
-    Moody(),
-    Raindrop(),
+    Native(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SettingsConfigType {
+    Native,
     Lua(serde_json::Value),
-    Moody(Color),
-    Raindrop(),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

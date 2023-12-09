@@ -1,0 +1,11 @@
+[package]
+name = "raindrop"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rand = "0.8.5"
+turbo_plugin = { path = "../../../turbo_plugin" }

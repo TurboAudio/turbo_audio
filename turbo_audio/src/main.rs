@@ -2,29 +2,23 @@ mod audio;
 mod config_parser;
 mod connections;
 mod controller;
+mod effects;
 mod hot_reload;
+mod hot_reloader;
 mod resources;
 
 use audio::audio_processing::AudioSignalProcessor;
-use controller::Controller;
-use hot_reload::{
-    check_lua_files_changed, start_config_hot_reload, start_hot_reload_lua_effects,
-    HotReloadReceiver,
-};
-use resources::effects::{
-    lua::{LuaEffect, LuaEffectSettings},
-    moody::{Moody, MoodySettings},
-    raindrop::{RaindropSettings, RaindropState, Raindrops},
-};
-use std::{fs::File, path::Path, sync::mpsc::TryRecvError};
-
-use audio::audio_stream::start_audio_loop;
-use audio::pipewire_listener::PipewireController;
+use audio::{audio_stream::start_audio_loop, pipewire_listener::PipewireController};
 use clap::Parser;
 use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, TurboAudioConfig};
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
+use controller::Controller;
+use effects::{lua::LuaEffectSettings, native::NativeEffectSettings, Effect, EffectSettings};
+use hot_reload::{start_config_hot_reload, HotReloadReceiver};
+use std::{fs::File, path::Path, sync::mpsc::TryRecvError};
 
-use crate::resources::{effects::Effect, ledstrip::LedStrip, settings::Settings};
+use crate::resources::ledstrip::LedStrip;
+
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
 struct Args {
@@ -43,17 +37,8 @@ enum RunLoopError {
 fn run_loop(
     mut audio_processor: AudioSignalProcessor,
     mut controller: Controller,
-    lua_effects_folder: impl AsRef<Path>,
     reload_config_rx: &HotReloadReceiver,
 ) -> Result<(), RunLoopError> {
-    let (hot_reload_rx, _debouncer) = match start_hot_reload_lua_effects(&lua_effects_folder) {
-        Err(e) => {
-            log::error!("Hot reload may not be active: {e:?}");
-            (None, None)
-        }
-        Ok((hot_reload_rx, debouncer)) => (Some(hot_reload_rx), Some(debouncer)),
-    };
-
     let mut lag = chrono::Duration::zero();
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
     let mut last_loop_start = std::time::Instant::now();
@@ -70,18 +55,9 @@ fn run_loop(
         audio_processor.compute_fft();
 
         let _fft_result_read_lock = audio_processor.fft_result.read().unwrap();
+        controller.check_hot_reload();
         controller.update_led_strips();
         controller.send_ledstrip_colors();
-
-        if let Some(hot_reload_rx) = &hot_reload_rx {
-            check_lua_files_changed(
-                &lua_effects_folder,
-                hot_reload_rx,
-                &mut controller.effects,
-                &controller.lua_effects_registry,
-                &audio_processor,
-            );
-        }
 
         match reload_config_rx.try_recv() {
             Ok(_) => return Ok(()),
@@ -105,7 +81,7 @@ fn load_controller(
     audio_processor: &AudioSignalProcessor,
     lua_effects_foler: impl AsRef<Path>,
 ) -> Result<Controller, LoadControllerError> {
-    let mut controller = Controller::new();
+    let mut controller = Controller::new(audio_processor, &lua_effects_foler);
     for connection_config in config.devices.iter() {
         match &connection_config.connection {
             ConnectionConfigType::Tcp(ip) => controller.add_connection(
@@ -122,20 +98,13 @@ fn load_controller(
         match &setting_config.setting {
             SettingsConfigType::Lua(settings) => controller.add_settings(
                 setting_config.id,
-                Settings::Lua(LuaEffectSettings {
+                EffectSettings::Lua(LuaEffectSettings {
                     settings: settings.clone(),
                 }),
             ),
-            SettingsConfigType::Moody(color) => controller.add_settings(
+            SettingsConfigType::Native => controller.add_settings(
                 setting_config.id,
-                Settings::Moody(MoodySettings { color: *color }),
-            ),
-            SettingsConfigType::Raindrop() => controller.add_settings(
-                setting_config.id,
-                Settings::Raindrop(RaindropSettings {
-                    rain_speed: 1,
-                    drop_rate: 0.5,
-                }),
+                EffectSettings::Native(NativeEffectSettings {}),
             ),
         }
     }
@@ -144,22 +113,12 @@ fn load_controller(
         match &effect_settings.effect {
             EffectConfigType::Lua(file_name) => {
                 let effect_path = lua_effects_foler.as_ref().to_owned().join(file_name);
-                controller.add_effect(
-                    effect_settings.effect_id,
-                    Effect::Lua(
-                        LuaEffect::new(effect_path, &lua_effects_foler, audio_processor).unwrap(),
-                    ),
-                )
+                controller.add_lua_effect(effect_settings.effect_id, effect_path);
             }
-            EffectConfigType::Moody() => {
-                controller.add_effect(effect_settings.effect_id, Effect::Moody(Moody {}))
+            EffectConfigType::Native(file_name) => {
+                let effect_path = std::path::PathBuf::from(file_name);
+                controller.add_native_effect(effect_settings.effect_id, effect_path);
             }
-            EffectConfigType::Raindrop() => controller.add_effect(
-                effect_settings.effect_id,
-                Effect::Raindrop(Raindrops {
-                    state: RaindropState { riples: vec![] },
-                }),
-            ),
         }
         if !controller
             .link_effect_to_settings(effect_settings.effect_id, effect_settings.settings_id)
@@ -230,6 +189,6 @@ fn main() -> Result<(), RunLoopError> {
             })?;
 
         log::info!("Starting run loop.");
-        run_loop(audio_processor, controller, &config.lua_effects_folder, &rx)?;
+        run_loop(audio_processor, controller, &rx)?;
     }
 }

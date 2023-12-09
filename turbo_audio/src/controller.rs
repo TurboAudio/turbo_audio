@@ -1,44 +1,208 @@
 use crate::{
-    resources::{
-        effects::{moody::update_moody, raindrop::update_raindrop},
-        ledstrip::LedStrip,
-    },
-    Connection, Effect, Settings,
+    audio::audio_processing::AudioSignalProcessor,
+    effects::{lua::LuaEffectsManager, native::NativeEffectsManager},
+    hot_reloader::{HotReloader, WatchablePath},
+    resources::ledstrip::LedStrip,
+    Connection, Effect, EffectSettings,
 };
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-#[derive(Default)]
 #[allow(unused)]
 pub struct Controller {
-    settings: HashMap<usize, Settings>,
-    pub effects: HashMap<usize, Effect>,
+    // settings id to EffectsSettings
+    settings: HashMap<usize, EffectSettings>,
+    // effect id to Effect. Is an option so that we can drop them first
+    effects: Option<HashMap<usize, Effect>>,
+    // effect id to settings id.
     effect_settings: HashMap<usize, usize>,
+
+    // connection id to connection
     connections: HashMap<usize, Connection>,
+    // led strip id to ledstrip
     led_strips: HashMap<usize, LedStrip>,
+
+    // led strip id to connection id
     led_strip_connections: HashMap<usize, usize>,
-    pub lua_effects_registry: HashMap<PathBuf, Vec<usize>>,
+
+    // Effects registry. Effect path to all its instance ids
+    effects_registry: HashMap<PathBuf, Vec<usize>>,
+
+    native_effect_manager: NativeEffectsManager,
+    lua_effects_manager: LuaEffectsManager,
+
+    hot_reloader: Option<HotReloader>,
+}
+
+impl Drop for Controller {
+    fn drop(&mut self) {
+        // Make sure that the effects are the first things that gets dropped
+        self.effects.take();
+    }
 }
 
 impl Controller {
-    pub fn new() -> Self {
-        Controller::default()
+    pub fn new(audio_processor: &AudioSignalProcessor, lua_package_root: impl AsRef<Path>) -> Self {
+        let hot_reloader = HotReloader::new(&[
+            WatchablePath::recursive(lua_package_root.as_ref()),
+            WatchablePath::recursive(PathBuf::from("../effects/bin").as_ref()),
+        ]);
+
+        // Don't propagate the error. Simply log that the hot reloader couldn't be initialized and
+        // continue execution
+        if let Err(e) = &hot_reloader {
+            log::error!("Could not start the effects hot reloader: {e}");
+        }
+
+        Self {
+            settings: Default::default(),
+            effects: Some(Default::default()),
+            effect_settings: Default::default(),
+            connections: Default::default(),
+            led_strips: Default::default(),
+            led_strip_connections: Default::default(),
+            effects_registry: Default::default(),
+            native_effect_manager: NativeEffectsManager::new(audio_processor),
+            lua_effects_manager: LuaEffectsManager::new(audio_processor, &lua_package_root),
+            hot_reloader: hot_reloader.ok(),
+        }
     }
 
-    pub fn add_effect(&mut self, id: usize, effect: Effect) {
-        if let Effect::Lua(lua_effect) = &effect {
-            log::info!("Added lua effect to registry: (id: {id})");
-            let lua_file_name = std::fs::canonicalize(lua_effect.get_path()).unwrap();
-            match self.lua_effects_registry.get_mut(&lua_file_name) {
-                Some(lua_effects) => lua_effects.push(id),
-                None => {
-                    self.lua_effects_registry.insert(lua_file_name, vec![id]);
-                }
+    fn on_file_change(&mut self, path: &Path, effects: &[usize]) {
+        let all_lua = effects
+            .iter()
+            .all(|id| matches!(self.effects.as_ref().unwrap().get(id), Some(Effect::Lua(_))));
+
+        let all_native = effects.iter().all(|id| {
+            matches!(
+                self.effects.as_ref().unwrap().get(id),
+                Some(Effect::Native(_))
+            )
+        });
+
+        if all_lua {
+            self.lua_effects_manager.on_file_changed(path);
+        } else if all_native {
+            self.native_effect_manager.on_file_changed(path);
+        } else {
+            log::error!(
+                "Not all effects loaded from the file {} are of the same type. This is impossible",
+                path.display()
+            );
+        }
+    }
+
+    pub fn check_hot_reload(&mut self) {
+        let Some(hot_reloader) = &self.hot_reloader else {
+            return;
+        };
+
+        let events = hot_reloader.poll_events();
+
+        for event in events {
+            let Ok(path) = std::fs::canonicalize(&event.path) else {
+                continue;
+            };
+
+            let Some(effects) = self.effects_registry.get(&path).map(|x| x.to_owned()) else {
+                continue;
+            };
+
+            println!("1");
+            for effect_id in &effects {
+                let Some(effect) = self.effects.as_mut().unwrap().get_mut(effect_id) else {
+                    continue;
+                };
+
+                if let Effect::Native(effect) = effect {
+                    self.native_effect_manager.pre_reload_effect(effect);
+                };
+            }
+
+            self.on_file_change(path.as_ref(), &effects);
+
+            for effect_id in effects {
+                let Some(effect) = self.effects.as_mut().unwrap().get_mut(&effect_id) else {
+                    continue;
+                };
+
+                match effect {
+                    Effect::Native(effect) => {
+                        self.native_effect_manager.reload_effect(effect);
+                    }
+                    Effect::Lua(effect) => {
+                        self.lua_effects_manager.reload_effect(effect);
+                    }
+                };
             }
         }
-        self.effects.insert(id, effect);
     }
 
-    pub fn add_settings(&mut self, id: usize, settings: Settings) {
+    pub fn add_lua_effect(&mut self, id: usize, effect_path: impl AsRef<Path>) {
+        let Ok(canonicalized_effect_path) = std::fs::canonicalize(&effect_path) else {
+            return;
+        };
+
+        let effect = self
+            .lua_effects_manager
+            .create_effect(&canonicalized_effect_path);
+
+        let effect = match effect {
+            Err(e) => {
+                log::error!(
+                    "Couln't add lua effect: {}. {e:#?}",
+                    effect_path.as_ref().display()
+                );
+                return;
+            }
+            Ok(x) => x,
+        };
+
+        self.on_effect_add(id, canonicalized_effect_path, effect);
+    }
+
+    pub fn add_native_effect(&mut self, id: usize, effect_path: impl AsRef<Path>) {
+        let Ok(canonicalized_effect_path) = std::fs::canonicalize(&effect_path) else {
+            return;
+        };
+
+        let effect = self
+            .native_effect_manager
+            .create_effect(&canonicalized_effect_path);
+
+        let effect = match effect {
+            Err(e) => {
+                log::error!(
+                    "Couln't add native effect: {}. {e:#?}",
+                    effect_path.as_ref().display()
+                );
+                return;
+            }
+            Ok(x) => x,
+        };
+
+        self.on_effect_add(id, canonicalized_effect_path, effect);
+    }
+
+    fn on_effect_add(&mut self, id: usize, effect_path: PathBuf, effect: Effect) {
+        match self.effects.as_mut().unwrap().entry(id) {
+            std::collections::hash_map::Entry::Occupied(_) => {
+                log::error!("Couldn't add effect with id {id} because it is already occupied");
+            }
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                entry.insert(effect);
+            }
+        }
+
+        self.effects_registry
+            .entry(effect_path)
+            .or_default()
+            .push(id);
+    }
+
+    pub fn add_settings(&mut self, id: usize, settings: EffectSettings) {
         self.settings.insert(id, settings);
     }
 
@@ -85,7 +249,7 @@ impl Controller {
                     }
                 };
 
-                let effect = match self.effects.get_mut(effect_id) {
+                let effect = match self.effects.as_mut().unwrap().get_mut(effect_id) {
                     Some(effect) => effect,
                     None => {
                         // TODO fix le probleme
@@ -105,16 +269,13 @@ impl Controller {
 
                 let setting = self.settings.get(setting_id);
                 match (effect, setting) {
-                    (Effect::Moody(_moody), Some(Settings::Moody(settings))) => {
-                        update_moody(leds, settings);
-                    }
-                    (Effect::Raindrop(raindrop), Some(Settings::Raindrop(settings))) => {
-                        update_raindrop(leds, settings, &mut raindrop.state);
-                    }
-                    (Effect::Lua(lua), Some(Settings::Lua(settings))) => {
+                    (Effect::Lua(lua), Some(EffectSettings::Lua(settings))) => {
                         if let Err(e) = lua.tick(leds, settings) {
                             log::error!("Error when executing lua function: {:?}", e);
                         }
+                    }
+                    (Effect::Native(native), Some(EffectSettings::Native(_settings))) => {
+                        native.tick(leds).unwrap();
                     }
                     _ => panic!("Effect doesn't match settings"),
                 }
@@ -133,7 +294,7 @@ impl Controller {
 
                         match connection {
                             Connection::Tcp(tcp_connection) => {
-                                // If send fails, connection is closed.
+                                // If send failsrust use Path for Pathbuf key, connection is closed.
                                 if let Err(error) = tcp_connection.send_data(data.to_vec()) {
                                     log::error!("{:?}", error);
                                     self.connections.remove(connection_id);

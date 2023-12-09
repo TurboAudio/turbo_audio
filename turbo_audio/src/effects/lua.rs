@@ -1,7 +1,5 @@
-use crate::{
-    audio::{audio_processing::AudioSignalProcessor, audio_processing::FftResult},
-    resources::color::Color,
-};
+use super::Effect;
+use crate::audio::{audio_processing::AudioSignalProcessor, audio_processing::FftResult};
 use jsonschema::JSONSchema;
 use mlua::{Error, Function, Lua, LuaSerdeExt, Table, Value};
 use std::{
@@ -10,6 +8,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
+use turbo_plugin::Color;
 
 #[derive(Debug)]
 pub enum InvalidEffectError {
@@ -30,6 +29,47 @@ pub enum LuaEffectRuntimeError {
     WrongColorsLen,
     MissingTickFunction,
     MissingFrameworkImport,
+}
+
+pub struct LuaEffectsManager {
+    package_root: PathBuf,
+    fft_result: Arc<RwLock<FftResult>>,
+}
+
+impl LuaEffectsManager {
+    pub fn new(audio_processor: &AudioSignalProcessor, package_root: impl AsRef<Path>) -> Self {
+        Self {
+            package_root: package_root.as_ref().to_owned(),
+            fft_result: audio_processor.fft_result.clone(),
+        }
+    }
+
+    pub fn create_effect(
+        &mut self,
+        effect_path: impl AsRef<Path>,
+    ) -> Result<Effect, LuaEffectLoadError> {
+        let effect = Effect::Lua(LuaEffect::new(
+            &effect_path,
+            &self.package_root,
+            self.fft_result.clone(),
+        )?);
+        Ok(effect)
+    }
+
+    pub fn on_file_changed(&mut self, _file: impl AsRef<Path>) {}
+
+    pub fn reload_effect(&mut self, effect_to_reload: &mut LuaEffect) {
+        let Ok(new_effect) = LuaEffect::new(
+            &effect_to_reload.path,
+            &self.package_root,
+            self.fft_result.clone(),
+        ) else {
+            log::error!("cringe");
+            return;
+        };
+
+        let _ = std::mem::replace(effect_to_reload, new_effect);
+    }
 }
 
 #[allow(unused)]
@@ -88,24 +128,20 @@ impl mlua::UserData for LuaFftResult {
 }
 
 impl LuaEffect {
-    pub fn new(
+    fn new(
         effect_path: impl AsRef<Path>,
         package_root: impl AsRef<Path>,
-        audio_processor: &AudioSignalProcessor,
+        fft_result: Arc<RwLock<FftResult>>,
     ) -> Result<Self, LuaEffectLoadError> {
         log::info!("Loading lua effect: {}", effect_path.as_ref().display());
         let (lua, json_schema, compiled_json_schema) =
-            Self::load_lua_effect(&effect_path, &package_root, audio_processor)?;
+            Self::load_lua_effect(&effect_path, &package_root, fft_result)?;
         Ok(Self {
             path: effect_path.as_ref().to_path_buf(),
             lua,
             json_schema,
             compiled_json_schema,
         })
-    }
-
-    pub fn get_path(&self) -> impl AsRef<Path> + '_ {
-        &self.path
     }
 
     pub fn tick(
@@ -176,7 +212,7 @@ impl LuaEffect {
     fn load_lua_effect(
         path: impl AsRef<Path>,
         package_path: impl AsRef<Path>,
-        audio_processor: &AudioSignalProcessor,
+        fft_result: Arc<RwLock<FftResult>>,
     ) -> Result<(Lua, String, JSONSchema), LuaEffectLoadError> {
         let lua_src = fs::read_to_string(path).map_err(LuaEffectLoadError::File)?;
         let lua = Lua::new();
@@ -205,12 +241,7 @@ impl LuaEffect {
             .map_err(|_| LuaEffectLoadError::Effect(InvalidEffectError::InvalidSchema))?;
 
         lua.globals()
-            .set(
-                "Fft_Result",
-                LuaFftResult {
-                    fft_result: audio_processor.fft_result.clone(),
-                },
-            )
+            .set("Fft_Result", LuaFftResult { fft_result })
             .unwrap();
 
         Ok((lua, schema.to_string(), compiled_schema))
