@@ -42,7 +42,7 @@ macro_rules! make_plugin {
 
             extern "C" fn plugin_destroy(plugin: *mut std::ffi::c_void) {
                 unsafe {
-                    drop(Box::from_raw(plugin as *mut Soin));
+                    drop(Box::from_raw(plugin as *mut $plugin));
                 }
             }
 
@@ -63,11 +63,11 @@ macro_rules! make_plugin {
 
             extern "C" fn load(audio_api: turbo_plugin::AudioApi) {
                 turbo_plugin::on_load(audio_api);
-                Soin::load();
+                <$plugin>::load();
             }
 
             extern "C" fn unload() {
-                Soin::unload();
+                <$plugin>::unload();
             }
 
             static VTABLE: VTable = VTable {

@@ -19,11 +19,11 @@ pub struct RaindropState {
     riples: Vec<(usize, Color, RipleDirection)>,
 }
 
-struct Soin {
+struct Raindrop {
     state: Mutex<RaindropState>,
 }
 
-impl Soin {
+impl Raindrop {
     pub fn new() -> Self {
         Self {
             state: Default::default(),
@@ -31,9 +31,9 @@ impl Soin {
     }
 }
 
-impl Plugin for Soin {
+impl Plugin for Raindrop {
     fn name(&self) -> *const std::ffi::c_char {
-        static NAME: &[u8] = b"Soin\0";
+        static NAME: &[u8] = b"Raindrop\0";
         static CSTR_NAME: &std::ffi::CStr =
             unsafe { std::ffi::CStr::from_bytes_with_nul_unchecked(NAME) };
         CSTR_NAME.as_ptr()
@@ -118,4 +118,4 @@ impl Plugin for Soin {
     fn unload() {}
 }
 
-make_plugin!(Soin, Soin::new());
+make_plugin!(Raindrop, Raindrop::new());
