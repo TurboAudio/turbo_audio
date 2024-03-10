@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::audio::pipewire_listener::StreamConnections;
+// use crate::audio::pipewire_listener::StreamConnections;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,7 +60,7 @@ pub struct TurboAudioConfig {
     pub lua_effects_folder: PathBuf,
     pub device_name: Option<String>,
     pub sample_rate: u32,
-    pub stream_connections: Vec<StreamConnections>,
+    // pub stream_connections: Vec<StreamConnections>,
     pub effect_settings: Vec<EffectSettingConfig>,
     pub effects: Vec<EffectConfig>,
     pub devices: Vec<DeviceConfig>,

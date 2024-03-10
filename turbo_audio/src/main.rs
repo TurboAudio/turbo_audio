@@ -9,7 +9,6 @@ mod resources;
 use crate::hot_reloader::{HotReloader, WatchablePath};
 use crate::resources::ledstrip::LedStrip;
 use audio::audio_processing::AudioSignalProcessor;
-use audio::{audio_stream::start_audio_loop, pipewire_listener::PipewireController};
 use clap::Parser;
 use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, TurboAudioConfig};
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
@@ -17,6 +16,9 @@ use controller::Controller;
 use effects::{lua::LuaEffectSettings, native::NativeEffectSettings, Effect, EffectSettings};
 use std::path::PathBuf;
 use std::{fs::File, path::Path};
+
+#[cfg(feature = "pipewire-listenner")]
+use audio::{audio_stream::start_audio_loop, pipewire_listener::PipewireController};
 
 #[derive(Parser, Debug)]
 #[command(author, version, long_about = None)]
@@ -49,7 +51,7 @@ fn run_loop(
     let config_hot_reload = config_hot_reload.ok();
 
     let mut lag = chrono::Duration::zero();
-    let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
+    let duration_per_tick: chrono::Duration = chrono::Duration::try_seconds(1).unwrap() / 60;
     let mut last_loop_start = std::time::Instant::now();
     loop {
         lag = lag
@@ -163,21 +165,22 @@ fn main() -> Result<(), RunLoopError> {
         let config: TurboAudioConfig =
             serde_json::from_reader(&File::open(settings_file.clone()).unwrap()).unwrap();
         log::info!("Starting audio loop.");
-        let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.sample_rate)
-            .map_err(|e| {
-                log::error!("{:?}", e);
-                RunLoopError::StartAudioLoop
-            })?;
+        // let (_stream, audio_rx) = start_audio_loop(config.device_name.clone(), config.sample_rate)
+        //     .map_err(|e| {
+        //         log::error!("{:?}", e);
+        //         RunLoopError::StartAudioLoop
+        //     })?;
 
-        log::info!("Creating pipewire listener.");
-        let pipewire_controller = PipewireController::new();
-        log::info!("Setting pipewire connections.");
-        pipewire_controller
-            .set_stream_connections(config.stream_connections.clone())
-            .map_err(|e| {
-                log::error!("{:?}", e);
-                RunLoopError::StartPipewireStream
-            })?;
+        let (_tx, audio_rx) = ringbuf::HeapRb::<f32>::new(1024).split();
+        // log::info!("Creating pipewire listener.");
+        // let pipewire_controller = PipewireController::new();
+        // log::info!("Setting pipewire connections.");
+        // pipewire_controller
+        //     .set_stream_connections(config.stream_connections.clone())
+        //     .map_err(|e| {
+        //         log::error!("{:?}", e);
+        //         RunLoopError::StartPipewireStream
+        //     })?;
 
         log::info!("Creating audio processor.");
         let fft_buffer_size: usize = 1024;
