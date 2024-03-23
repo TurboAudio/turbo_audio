@@ -110,7 +110,6 @@ impl Controller {
                 continue;
             };
 
-            println!("1");
             for effect_id in &effects {
                 let Some(effect) = self.effects.as_mut().unwrap().get_mut(effect_id) else {
                     continue;
