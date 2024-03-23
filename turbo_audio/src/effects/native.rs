@@ -74,16 +74,11 @@ impl NativeEffectsManager {
     }
 
     pub fn on_file_changed(&mut self, path: impl AsRef<Path>) {
-        println!("3");
-        if let Some(lib) = self.libraries.get(&path.as_ref().to_owned()) {
-            let count = Arc::strong_count(lib);
-            log::info!("COUNT SHOULD BE 1: {}", count);
-        }
         self.libraries.remove(&path.as_ref().to_owned());
         log::info!("Reloading library: {}", path.as_ref().display());
 
         let Ok(library) = Self::load_library(&self.fft_result, path.as_ref()) else {
-            log::error!("asdfs");
+            log::error!("Error");
             return;
         };
 
@@ -92,7 +87,6 @@ impl NativeEffectsManager {
     }
 
     pub fn pre_reload_effect(&mut self, effect: &mut NativeEffect) {
-        println!("2");
         if let Some(library) = &effect.library {
             unsafe {
                 ((*library.vtable).plugin_destroy)(effect.pointer);
