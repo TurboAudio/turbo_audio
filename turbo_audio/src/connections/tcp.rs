@@ -14,11 +14,13 @@ pub struct TcpConnection {
     should_quit: Arc<Mutex<bool>>,
 }
 
+#[allow(dead_code)]
 enum TcpConnectionError {
     ConnectionFailed(ConnectionAttemptError),
     UnableToReconnect(ConnectionAttemptError, std::io::Error),
 }
 
+#[allow(dead_code)]
 enum ConnectionAttemptError {
     Unreachable(std::net::SocketAddr),
     ConfigurationFailed(std::io::Error),

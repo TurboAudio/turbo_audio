@@ -2,8 +2,8 @@ mod audio;
 mod config_parser;
 mod connections;
 mod controller;
-mod effects;
 mod hot_reloader;
+mod plugins;
 mod resources;
 
 use crate::hot_reloader::{HotReloader, WatchablePath};
@@ -14,8 +14,11 @@ use clap::Parser;
 use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, TurboAudioConfig};
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
 use controller::Controller;
-use effects::{lua::LuaEffectSettings, native::NativeEffectSettings, Effect, EffectSettings};
+use plugins::effects::{
+    lua::LuaEffectSettings, native::NativeEffectSettings, Effect, EffectSettings,
+};
 use std::path::PathBuf;
+use std::sync::atomic::{self, AtomicBool};
 use std::{fs::File, path::Path};
 
 #[derive(Parser, Debug)]
@@ -32,6 +35,8 @@ enum RunLoopError {
     StartAudioLoop,
     StartPipewireStream,
 }
+
+pub static SHOULD_QUIT: AtomicBool = AtomicBool::new(false);
 
 fn run_loop(
     mut audio_processor: AudioSignalProcessor,
@@ -52,6 +57,11 @@ fn run_loop(
     let duration_per_tick: chrono::Duration = chrono::Duration::seconds(1) / 60;
     let mut last_loop_start = std::time::Instant::now();
     loop {
+        if SHOULD_QUIT.load(atomic::Ordering::Relaxed) {
+            log::info!("Quitting");
+            break Ok(());
+        }
+
         lag = lag
             .checked_add(&chrono::Duration::from_std(last_loop_start.elapsed()).unwrap())
             .unwrap();
@@ -156,6 +166,13 @@ fn load_controller(
 
 fn main() -> Result<(), RunLoopError> {
     env_logger::init();
+
+    ctrlc::set_handler(|| {
+        log::info!("Received ctrl-c, requesting to quit");
+        SHOULD_QUIT.store(true, atomic::Ordering::Relaxed);
+    })
+    .expect("Couldn't set the CTRL-C handler");
+
     let Args { settings_file } = Args::parse();
 
     loop {
@@ -193,6 +210,10 @@ fn main() -> Result<(), RunLoopError> {
 
         log::info!("Starting run loop.");
         run_loop(audio_processor, controller)?;
+        if SHOULD_QUIT.load(atomic::Ordering::Relaxed) {
+            log::info!("Quitting");
+            break Ok(());
+        }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }

@@ -1,6 +1,6 @@
 use rand::Rng;
 use std::sync::Mutex;
-use turbo_plugin::{make_plugin, Color, Plugin, VTable};
+use turbo_plugin::{make_native_effect_plugin, effect_plugin::NativeEffectPlugin, Color};
 
 #[derive(Clone, Copy, Debug)]
 pub struct RaindropSettings {
@@ -31,7 +31,7 @@ impl Raindrop {
     }
 }
 
-impl Plugin for Raindrop {
+impl NativeEffectPlugin for Raindrop {
     fn name(&self) -> *const std::ffi::c_char {
         static NAME: &[u8] = b"Raindrop\0";
         static CSTR_NAME: &std::ffi::CStr =
@@ -118,4 +118,4 @@ impl Plugin for Raindrop {
     fn unload() {}
 }
 
-make_plugin!(Raindrop, Raindrop::new());
+make_native_effect_plugin!(Raindrop, Raindrop::new());

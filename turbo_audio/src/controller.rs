@@ -1,7 +1,7 @@
 use crate::{
     audio::audio_processing::AudioSignalProcessor,
-    effects::{lua::LuaEffectsManager, native::NativeEffectsManager},
     hot_reloader::{HotReloader, WatchablePath},
+    plugins::effects::{lua::LuaEffectsManager, native::NativeEffectsManager},
     resources::ledstrip::LedStrip,
     Connection, Effect, EffectSettings,
 };

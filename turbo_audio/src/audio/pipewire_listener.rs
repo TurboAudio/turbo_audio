@@ -311,7 +311,7 @@ impl PipewireState {
             .unwrap_or_default()
             .to_string();
 
-        log::info!("Pipewire node: {name}");
+        log::debug!("Pipewire node: {name}");
 
         self.nodes.insert(
             node.id,

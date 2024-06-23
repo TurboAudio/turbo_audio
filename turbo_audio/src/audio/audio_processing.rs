@@ -10,6 +10,12 @@ pub struct FftResult {
     fft_resolution: f32,
 }
 
+impl Drop for FftResult {
+    fn drop(&mut self) {
+        log::debug!("Dropping FftResult");
+    }
+}
+
 impl FftResult {
     pub fn new(raw_bins: Vec<f32>, fft_resolution: f32) -> Self {
         Self {
