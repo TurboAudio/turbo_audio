@@ -1,0 +1,13 @@
+[package]
+name = "ui"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+eframe = "0.27.2"
+egui-winit = "0.27.2"
+egui_plot = "0.27.2"
+turbo_plugin = { path = "../../turbo_plugin" }

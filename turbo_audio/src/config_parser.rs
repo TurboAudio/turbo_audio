@@ -65,4 +65,5 @@ pub struct TurboAudioConfig {
     pub effects: Vec<EffectConfig>,
     pub devices: Vec<DeviceConfig>,
     pub ledstrips: Vec<LedstripConfig>,
+    pub general_plugins: Vec<String>,
 }
