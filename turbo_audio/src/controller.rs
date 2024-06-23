@@ -1,6 +1,6 @@
 use crate::{
     audio::audio_processing::AudioSignalProcessor,
-    effects::{lua::LuaEffectsManager, native::NativeEffectsManager},
+    effects::{lua::LuaEffectsManager, native::NativeEffectsManager, python::PythonEffectManager},
     hot_reloader::{HotReloader, WatchablePath},
     resources::ledstrip::LedStrip,
     Connection, Effect, EffectSettings,
@@ -32,6 +32,7 @@ pub struct Controller {
 
     native_effect_manager: NativeEffectsManager,
     lua_effects_manager: LuaEffectsManager,
+    python_effect_manager: PythonEffectManager,
 
     hot_reloader: Option<HotReloader>,
 }
@@ -66,6 +67,7 @@ impl Controller {
             effects_registry: Default::default(),
             native_effect_manager: NativeEffectsManager::new(audio_processor),
             lua_effects_manager: LuaEffectsManager::new(audio_processor, &lua_package_root),
+            python_effect_manager: PythonEffectManager::new(audio_processor),
             hot_reloader: hot_reloader.ok(),
         }
     }
@@ -135,6 +137,8 @@ impl Controller {
                     Effect::Lua(effect) => {
                         self.lua_effects_manager.reload_effect(effect);
                     }
+                    Effect::Python(_effect) => {
+                    }
                 };
             }
         }
@@ -180,6 +184,30 @@ impl Controller {
             Err(e) => {
                 log::error!(
                     "Couln't add native effect: {}. {e:#?}",
+                    effect_path.as_ref().display()
+                );
+                return;
+            }
+            Ok(x) => x,
+        };
+
+        self.on_effect_add(id, canonicalized_effect_path, effect);
+    }
+
+    pub fn add_python_effect(&mut self, id: usize, effect_path: impl AsRef<Path>) {
+        let Ok(canonicalized_effect_path) = std::fs::canonicalize(&effect_path) else {
+            println!("This is special");
+            return;
+        };
+
+        let effect = self
+            .python_effect_manager
+            .create_effect(&canonicalized_effect_path);
+
+        let effect = match effect {
+            Err(e) => {
+                log::error!(
+                    "Couln't add python effect: {}. {e:#?}",
                     effect_path.as_ref().display()
                 );
                 return;
@@ -281,9 +309,13 @@ impl Controller {
                     (Effect::Native(native), Some(EffectSettings::Native(_settings))) => {
                         native.tick(leds).unwrap();
                     }
+                    (Effect::Python(python), Some(EffectSettings::Python(_settings))) => {
+                        python.tick(leds);
+                    }
                     _ => panic!("Effect doesn't match settings"),
                 }
             }
+            println!("Led colors {:?}", led_strip.colors);
         }
     }
 

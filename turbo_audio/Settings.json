@@ -30,6 +30,10 @@
     {
       "setting": "Native",
       "id": 2
+    },
+    {
+      "setting": "Python",
+      "id": 3
     }
   ],
   "effects": [
@@ -46,6 +50,13 @@
       "effect": {
         "Native": "../effects/bin/libraindrop.so"
       }
+    },
+    {
+      "effect_id": 3,
+      "settings_id": 3,
+      "effect": {
+        "Python": "../effects/python/test.py"
+      }
     }
   ],
   "devices": [
@@ -61,11 +72,11 @@
     {
       "id": 1,
       "connection_id": 1,
-      "size": 300,
+      "size": 5,
       "effects": [
         {
-          "effect_id": 1,
-          "effect_size": 300
+          "effect_id": 3,
+          "effect_size": 5
         }
       ]
     }

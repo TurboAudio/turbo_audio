@@ -13,6 +13,7 @@ use clap::Parser;
 use config_parser::{ConnectionConfigType, EffectConfigType, SettingsConfigType, TurboAudioConfig};
 use connections::{tcp::TcpConnection, usb::UsbConnection, Connection};
 use controller::Controller;
+use effects::python::PythonEffectSettings;
 use effects::{lua::LuaEffectSettings, native::NativeEffectSettings, Effect, EffectSettings};
 use std::path::PathBuf;
 use std::{fs::File, path::Path};
@@ -116,6 +117,10 @@ fn load_controller(
                 setting_config.id,
                 EffectSettings::Native(NativeEffectSettings {}),
             ),
+            SettingsConfigType::Python => controller.add_settings(
+                setting_config.id,
+                EffectSettings::Python(PythonEffectSettings {}),
+            ),
         }
     }
 
@@ -128,6 +133,11 @@ fn load_controller(
             EffectConfigType::Native(file_name) => {
                 let effect_path = std::path::PathBuf::from(file_name);
                 controller.add_native_effect(effect_settings.effect_id, effect_path);
+            }
+            EffectConfigType::Python(file_name) => {
+                println!("Creating python effect");
+                let effect_path = std::path::PathBuf::from(file_name);
+                controller.add_python_effect(effect_settings.effect_id, effect_path);
             }
         }
         if !controller

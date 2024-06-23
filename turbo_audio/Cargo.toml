@@ -28,11 +28,16 @@ rustfft = "6.1.0"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"
 thiserror = "1.0.50"
+pyo3 = "0.20.3"
+
 turbo_plugin = { path = "../turbo_plugin" }
+turbo_plugin_python = { path = "../turbo_plugin_python" }
+
 
 pipewire = {version = "0.7.2", optional = true}
 cpal = { version = "0.15.2", optional = true }
 
 [features]
 pipewire-listenner = ["pipewire", "cpal"]
+extension-module = ["pyo3/extension-module"]
 

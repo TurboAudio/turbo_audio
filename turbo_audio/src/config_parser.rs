@@ -7,12 +7,14 @@ use serde::{Deserialize, Serialize};
 pub enum EffectConfigType {
     Lua(String),
     Native(String),
+    Python(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum SettingsConfigType {
     Native,
     Lua(serde_json::Value),
+    Python,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
