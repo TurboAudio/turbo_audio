@@ -1,4 +1,7 @@
-use crate::audio::audio_processing::{AudioSignalProcessor, FftResult};
+use crate::{
+    audio::audio_processing::{AudioSignalProcessor, FftResult},
+    plugins::audio_api::create_audio_api,
+};
 use libloading::os::unix::{RTLD_LOCAL, RTLD_NOW};
 use std::{
     collections::HashMap,
@@ -7,7 +10,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use thiserror::Error;
-use turbo_plugin::{Color, VTable};
+use turbo_plugin::{effect_plugin::NativeEffectPluginVTable, Color};
 
 use super::Effect;
 
@@ -30,7 +33,7 @@ pub struct NativeEffectsManager {
 #[derive(Debug)]
 struct Library {
     library: Option<libloading::Library>,
-    vtable: *const VTable,
+    vtable: *const NativeEffectPluginVTable,
 }
 
 unsafe impl Send for Library {}
@@ -53,6 +56,7 @@ impl NativeEffectsManager {
             fft_result: audio_processor.fft_result.clone(),
         }
     }
+
     pub fn create_effect(&mut self, effect_path: impl AsRef<Path>) -> Result<Effect> {
         let path = std::fs::canonicalize(&effect_path).unwrap();
 
@@ -112,52 +116,10 @@ impl NativeEffectsManager {
             let vtable_fn =
                 library.get::<extern "C" fn() -> *const std::ffi::c_void>(b"_plugin_vtable")?;
 
-            let vtable = vtable_fn() as *const turbo_plugin::VTable;
+            let vtable =
+                vtable_fn() as *const turbo_plugin::effect_plugin::NativeEffectPluginVTable;
 
-            extern "C" fn get_average_amplitude(
-                instance: *const std::ffi::c_void,
-                lower_frequency: std::ffi::c_float,
-                upper_frequency: std::ffi::c_float,
-            ) -> std::ffi::c_float {
-                let fft_result = unsafe { &*(instance as *const Arc<RwLock<FftResult>>) };
-                fft_result
-                    .read()
-                    .unwrap()
-                    .get_average_amplitude(lower_frequency, upper_frequency)
-                    .unwrap_or_else(|| {
-                        log::error!("Invalid frequencies: {lower_frequency} & {upper_frequency}");
-                        0.0f32
-                    })
-            }
-
-            extern "C" fn get_frequency_amplitude(
-                instance: *const std::ffi::c_void,
-                frequency: std::ffi::c_float,
-            ) -> std::ffi::c_float {
-                let fft_result = unsafe { &*(instance as *const Arc<RwLock<FftResult>>) };
-                fft_result
-                    .read()
-                    .unwrap()
-                    .get_frequency_amplitude(frequency)
-                    .unwrap_or_else(|| {
-                        log::error!("Invalid frequency: {frequency}");
-                        0.0f32
-                    })
-            }
-
-            extern "C" fn get_max_frequency(
-                instance: *const std::ffi::c_void,
-            ) -> std::ffi::c_float {
-                let fft_result = unsafe { &*(instance as *const Arc<RwLock<FftResult>>) };
-                fft_result.read().unwrap().get_max_frequency()
-            }
-
-            let audio_api = turbo_plugin::AudioApi {
-                instance: fft_result as *const _ as *const _,
-                get_average_amplitude,
-                get_frequency_amplitude,
-                get_max_frequency,
-            };
+            let audio_api = create_audio_api(fft_result.clone());
 
             ((*vtable).load)(audio_api);
 
