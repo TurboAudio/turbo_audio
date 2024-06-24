@@ -15,6 +15,9 @@ pub struct AudioApi {
     get_frequency_amplitude:
         extern "C" fn(*const std::ffi::c_void, std::ffi::c_float) -> std::ffi::c_float,
     get_max_frequency: extern "C" fn(*const std::ffi::c_void) -> std::ffi::c_float,
+    get_bin_count: extern "C" fn(*const std::ffi::c_void) -> std::ffi::c_ulonglong,
+    get_bin_value_at_index:
+        extern "C" fn(*const std::ffi::c_void, std::ffi::c_ulonglong) -> std::ffi::c_float,
     free: extern "C" fn(*const std::ffi::c_void),
 }
 
@@ -35,6 +38,12 @@ impl AudioApi {
             std::ffi::c_float,
         ) -> std::ffi::c_float,
         get_max_frequency: extern "C" fn(*const std::ffi::c_void) -> std::ffi::c_float,
+
+        get_bin_count: extern "C" fn(*const std::ffi::c_void) -> std::ffi::c_ulonglong,
+        get_bin_value_at_index: extern "C" fn(
+            *const std::ffi::c_void,
+            std::ffi::c_ulonglong,
+        ) -> std::ffi::c_float,
         free: extern "C" fn(*const std::ffi::c_void),
     ) -> Self {
         Self {
@@ -42,6 +51,8 @@ impl AudioApi {
             get_average_amplitude,
             get_frequency_amplitude,
             get_max_frequency,
+            get_bin_count,
+            get_bin_value_at_index,
             free,
         }
     }
@@ -76,7 +87,7 @@ pub fn get_frequency_amplitude(frequency: f32) -> f32 {
     (api.get_frequency_amplitude)(api.instance, frequency)
 }
 
-pub fn get_max_frequency() -> std::ffi::c_float {
+pub fn get_max_frequency() -> f32 {
     let Some(api) = AUDIO_API_INSTANCE.get() else {
         eprintln!("PLUGIN ERROR: Couldn't get the audio api pointer");
         abort();
@@ -86,12 +97,44 @@ pub fn get_max_frequency() -> std::ffi::c_float {
     (api.get_max_frequency)(api.instance)
 }
 
-pub fn free() {
+pub fn get_bin_count() -> usize {
     let Some(api) = AUDIO_API_INSTANCE.get() else {
         eprintln!("PLUGIN ERROR: Couldn't get the audio api pointer");
         abort();
     };
     let api = api.lock().unwrap();
 
-    (api.free)(api.instance)
+    (api.get_bin_count)(api.instance) as _
+}
+
+pub fn get_bin_value_at_index(index: usize) -> f32 {
+    let Some(api) = AUDIO_API_INSTANCE.get() else {
+        eprintln!("PLUGIN ERROR: Couldn't get the audio api pointer");
+        abort();
+    };
+    let api = api.lock().unwrap();
+
+    (api.get_bin_value_at_index)(api.instance, index as _)
+}
+
+pub fn get_all_bins(bins: &mut Vec<f32>) {
+    let Some(api) = AUDIO_API_INSTANCE.get() else {
+        eprintln!("PLUGIN ERROR: Couldn't get the audio api pointer");
+        abort();
+    };
+    let api = api.lock().unwrap();
+
+    let bin_count: usize = (api.get_bin_count)(api.instance) as usize / 2;
+    bins.resize(bin_count, 0.0_f32);
+
+    for (index, value) in bins.iter_mut().enumerate() {
+        *value = (api.get_bin_value_at_index)(api.instance, index as _);
+    }
+}
+
+pub fn free() {
+    if let Some(api) = AUDIO_API_INSTANCE.get() {
+        let api = api.lock().unwrap();
+        (api.free)(api.instance);
+    }
 }

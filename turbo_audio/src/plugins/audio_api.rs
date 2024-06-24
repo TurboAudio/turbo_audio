@@ -43,6 +43,22 @@ pub fn create_audio_api(fft_result: Arc<RwLock<FftResult>>) -> AudioApi {
         fft_result.read().unwrap().get_max_frequency()
     }
 
+    extern "C" fn get_bin_count(instance: *const std::ffi::c_void) -> std::ffi::c_ulonglong {
+        let fft_result = unsafe { &*(instance as *const Arc<RwLock<FftResult>>) };
+        fft_result.read().unwrap().get_bin_count() as _
+    }
+
+    extern "C" fn get_bin_value_at_index(
+        instance: *const std::ffi::c_void,
+        index: std::ffi::c_ulonglong,
+    ) -> std::ffi::c_float {
+        let fft_result = unsafe { &*(instance as *const Arc<RwLock<FftResult>>) };
+        fft_result
+            .read()
+            .unwrap()
+            .get_bin_value_at_index(index as _)
+    }
+
     extern "C" fn free(instance: *const std::ffi::c_void) {
         unsafe {
             drop(Box::from_raw(instance as *mut Arc<RwLock<FftResult>>));
@@ -56,6 +72,8 @@ pub fn create_audio_api(fft_result: Arc<RwLock<FftResult>>) -> AudioApi {
         get_average_amplitude,
         get_frequency_amplitude,
         get_max_frequency,
+        get_bin_count,
+        get_bin_value_at_index,
         free,
     )
 }
