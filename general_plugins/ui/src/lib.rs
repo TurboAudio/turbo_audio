@@ -1,6 +1,6 @@
 use eframe::{
     egui::{self, Vec2b},
-    EventLoopBuilder, UserEvent,
+    CreationContext, EventLoopBuilder, UserEvent,
 };
 use egui_plot::{Line, Plot, PlotPoint, PlotPoints};
 use egui_winit::winit::platform::x11::EventLoopBuilderExtX11;
@@ -8,22 +8,23 @@ use turbo_plugin::{
     audio_api::get_all_bins, general_plugin::NativeGeneralPlugin, make_general_effect_plugin,
 };
 
-fn ui_thread() {
-    loop {
-        let native_options = eframe::NativeOptions {
-            event_loop_builder: Some(Box::new(|builder: &mut EventLoopBuilder<UserEvent>| {
-                builder.with_any_thread(true);
-            })),
-            ..Default::default()
-        };
+fn ui_thread(context_sender: oneshot::Sender<egui::Context>) {
+    let native_options = eframe::NativeOptions {
+        event_loop_builder: Some(Box::new(|builder: &mut EventLoopBuilder<UserEvent>| {
+            builder.with_any_thread(true);
+        })),
+        ..Default::default()
+    };
 
-        eframe::run_native(
-            "My egui App",
-            native_options,
-            Box::new(|cc| Box::new(MyEguiApp::new(cc))),
-        )
-        .unwrap();
-    }
+    eframe::run_native(
+        "My egui App",
+        native_options,
+        Box::new(|cc| {
+            let _ = context_sender.send(cc.egui_ctx.clone());
+            Box::new(MyEguiApp::new(cc))
+        }),
+    )
+    .unwrap();
 }
 
 #[derive(Default)]
@@ -33,7 +34,7 @@ struct MyEguiApp {
 }
 
 impl MyEguiApp {
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
         Self::default()
     }
 }
@@ -41,19 +42,17 @@ impl MyEguiApp {
 impl eframe::App for MyEguiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         const MAX_SMOOTHING: f32 = 0.9;
-        const MIN_SMOOTHING: f32 = 0.5;
-        const NUM_BINS_VISUAL: usize = 30;
+        const MIN_SMOOTHING: f32 = 0.9;
+        const NUM_BINS_VISUAL: usize = 20;
         const GAMMA: f32 = 2.0;
         const MAX_AVERAGE: usize = 2;
 
-        ctx.request_repaint();
-
         get_all_bins(&mut self.bins);
-        let bins_len = self.bins.len();
+        let bins_len = (self.bins.len() as f32 * 0.66).round() as usize;
+        let bins = &mut self.bins.as_mut_slice()[0..bins_len];
 
-        // Apply log to bins
-        for bin in &mut self.bins {
-            *bin = ((*bin + 1.0_f32).log10()).max(0.0);
+        for (index, bin) in bins.iter_mut().enumerate() {
+            *bin = (((*bin * (index + 1) as f32) + 1.0_f32).log10()).max(0.0);
         }
 
         self.points
@@ -72,7 +71,7 @@ impl eframe::App for MyEguiApp {
                 .round()
                 .min((bins_len - 1) as f32) as usize;
 
-            let bin_slice = &self.bins.as_mut_slice()[current..next];
+            let bin_slice = &bins[current..next];
 
             memory_scratchpad.clear();
             memory_scratchpad.extend_from_slice(bin_slice);
@@ -110,7 +109,9 @@ impl eframe::App for MyEguiApp {
     }
 }
 
-struct Ui {}
+struct Ui {
+    egui_ctx: egui::Context,
+}
 
 impl Drop for Ui {
     fn drop(&mut self) {
@@ -120,8 +121,14 @@ impl Drop for Ui {
 
 impl Ui {
     pub fn new() -> Self {
-        std::thread::spawn(ui_thread);
-        Self {}
+        let (sender, rcv) = oneshot::channel();
+        std::thread::spawn(|| {
+            ui_thread(sender);
+        });
+        let egui_ctx = rcv.recv().unwrap();
+        Self {
+            egui_ctx
+        }
     }
 }
 
@@ -130,7 +137,9 @@ impl NativeGeneralPlugin for Ui {
         c"UI".as_ptr()
     }
 
-    fn tick(&mut self) {}
+    fn tick(&mut self) {
+        self.egui_ctx.request_repaint();
+    }
 
     fn load() {
         println!("UI library loaded")

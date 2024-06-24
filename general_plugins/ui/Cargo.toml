@@ -10,4 +10,5 @@ crate-type = ["cdylib"]
 eframe = "0.27.2"
 egui-winit = "0.27.2"
 egui_plot = "0.27.2"
+oneshot = "0.1.8"
 turbo_plugin = { path = "../../turbo_plugin" }
