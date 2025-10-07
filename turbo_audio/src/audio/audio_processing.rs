@@ -46,6 +46,14 @@ impl FftResult {
         )
     }
 
+    pub fn get_bin_count(&self) -> usize {
+        self.raw_bins.len()
+    }
+
+    pub fn get_bin_value_at_index(&self, index: usize) -> f32 {
+        self.raw_bins.get(index).copied().unwrap_or_default()
+    }
+
     fn get_area_under_curve(&self, lower_frequency: f32, upper_frequency: f32) -> Option<f32> {
         if lower_frequency > upper_frequency {
             return None;

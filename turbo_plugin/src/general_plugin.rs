@@ -6,7 +6,7 @@ pub trait NativeGeneralPlugin: Any + Send + Sync {
     fn name(&self) -> *const std::ffi::c_char;
 
     /// Tick fn
-    fn tick(&self);
+    fn tick(&mut self);
 
     /// A callback called immediately after the plugin is loaded. Usually used
     /// for initialization.
@@ -39,13 +39,10 @@ macro_rules! make_general_effect_plugin {
             }
 
             extern "C" fn tick(
-                plugin: *const std::ffi::c_void,
-                colors: *mut Color,
-                len: std::ffi::c_ulong,
+                plugin: *mut std::ffi::c_void,
             ) {
-                let plugin = unsafe { &*(plugin as *const $plugin) };
-                let slice = unsafe { std::slice::from_raw_parts_mut(colors, len as _) };
-                plugin.tick(slice);
+                let mut plugin = unsafe { &mut *(plugin as *mut $plugin) };
+                plugin.tick();
             }
 
             extern "C" fn load(audio_api: turbo_plugin::audio_api::AudioApi) {
@@ -54,6 +51,7 @@ macro_rules! make_general_effect_plugin {
             }
 
             extern "C" fn unload() {
+                turbo_plugin::audio_api::free();
                 <$plugin>::unload();
             }
 
@@ -85,7 +83,7 @@ pub struct NativeGeneralPluginVTable {
     pub name: extern "C" fn(*const std::ffi::c_void) -> *const std::ffi::c_char,
 
     /// Function that ticks the plugin
-    pub tick: extern "C" fn(*const std::ffi::c_void),
+    pub tick: extern "C" fn(*mut std::ffi::c_void),
 
     /// Function that gets called when the shared library gets loaded
     /// Useful for making initialization that is shared between plugin instances

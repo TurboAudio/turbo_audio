@@ -1,7 +1,7 @@
 use crate::{
     audio::audio_processing::AudioSignalProcessor,
     hot_reloader::{HotReloader, WatchablePath},
-    plugins::effects::{lua::LuaEffectsManager, native::NativeEffectsManager},
+    plugins::effects::{lua::LuaEffectsManager, native::NativeEffectsPluginManager},
     resources::ledstrip::LedStrip,
     Connection, Effect, EffectSettings,
 };
@@ -30,7 +30,7 @@ pub struct Controller {
     // Effects registry. Effect path to all its instance ids
     effects_registry: HashMap<PathBuf, Vec<usize>>,
 
-    native_effect_manager: NativeEffectsManager,
+    native_effect_manager: NativeEffectsPluginManager,
     lua_effects_manager: LuaEffectsManager,
 
     hot_reloader: Option<HotReloader>,
@@ -64,7 +64,7 @@ impl Controller {
             led_strips: Default::default(),
             led_strip_connections: Default::default(),
             effects_registry: Default::default(),
-            native_effect_manager: NativeEffectsManager::new(audio_processor),
+            native_effect_manager: NativeEffectsPluginManager::new(audio_processor),
             lua_effects_manager: LuaEffectsManager::new(audio_processor, &lua_package_root),
             hot_reloader: hot_reloader.ok(),
         }

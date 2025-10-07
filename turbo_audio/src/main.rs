@@ -7,6 +7,7 @@ mod plugins;
 mod resources;
 
 use crate::hot_reloader::{HotReloader, WatchablePath};
+use crate::plugins::general::manager::GeneralPluginManager;
 use crate::resources::ledstrip::LedStrip;
 use audio::audio_processing::AudioSignalProcessor;
 use audio::{audio_stream::start_audio_loop, pipewire_listener::PipewireController};
@@ -41,6 +42,7 @@ pub static SHOULD_QUIT: AtomicBool = AtomicBool::new(false);
 fn run_loop(
     mut audio_processor: AudioSignalProcessor,
     mut controller: Controller,
+    mut general_plugin_manager: GeneralPluginManager,
 ) -> Result<(), RunLoopError> {
     log::info!("Creating watcher on Settings.json");
     let config_hot_reload = HotReloader::new(&[WatchablePath::non_recursive(&PathBuf::from(
@@ -78,6 +80,8 @@ fn run_loop(
         controller.update_led_strips();
         controller.send_ledstrip_colors();
 
+        general_plugin_manager.tick_all();
+
         if let Some(config_hot_reload) = &config_hot_reload {
             if !config_hot_reload.poll_events().is_empty() {
                 log::info!("Config changed. Restarting.");
@@ -89,6 +93,19 @@ fn run_loop(
     }
 }
 
+fn load_general_plugin_manager(
+    config: &TurboAudioConfig,
+    audio_processor: &AudioSignalProcessor,
+) -> GeneralPluginManager {
+    let mut general_plugin_manager = GeneralPluginManager::new(&audio_processor);
+
+    for plugin_path in &config.general_plugins {
+        general_plugin_manager.load_native_plugin(Path::new(plugin_path.as_str()));
+    }
+
+    general_plugin_manager
+}
+
 #[derive(Debug)]
 enum LoadControllerError {
     Invalid,
@@ -97,9 +114,9 @@ enum LoadControllerError {
 fn load_controller(
     config: &TurboAudioConfig,
     audio_processor: &AudioSignalProcessor,
-    lua_effects_foler: impl AsRef<Path>,
+    lua_effects_folder: impl AsRef<Path>,
 ) -> Result<Controller, LoadControllerError> {
-    let mut controller = Controller::new(audio_processor, &lua_effects_foler);
+    let mut controller = Controller::new(audio_processor, &lua_effects_folder);
     for connection_config in config.devices.iter() {
         match &connection_config.connection {
             ConnectionConfigType::Tcp(ip) => controller.add_connection(
@@ -130,7 +147,7 @@ fn load_controller(
     for effect_settings in config.effects.iter() {
         match &effect_settings.effect {
             EffectConfigType::Lua(file_name) => {
-                let effect_path = lua_effects_foler.as_ref().to_owned().join(file_name);
+                let effect_path = lua_effects_folder.as_ref().to_owned().join(file_name);
                 controller.add_lua_effect(effect_settings.effect_id, effect_path);
             }
             EffectConfigType::Native(file_name) => {
@@ -168,6 +185,7 @@ fn main() -> Result<(), RunLoopError> {
     env_logger::init();
 
     ctrlc::set_handler(|| {
+        println!();
         log::info!("Received ctrl-c, requesting to quit");
         SHOULD_QUIT.store(true, atomic::Ordering::Relaxed);
     })
@@ -208,8 +226,10 @@ fn main() -> Result<(), RunLoopError> {
                 RunLoopError::LoadConfigFile
             })?;
 
+        let general_plugin_manager = load_general_plugin_manager(&config, &audio_processor);
+
         log::info!("Starting run loop.");
-        run_loop(audio_processor, controller)?;
+        run_loop(audio_processor, controller, general_plugin_manager)?;
         if SHOULD_QUIT.load(atomic::Ordering::Relaxed) {
             log::info!("Quitting");
             break Ok(());
